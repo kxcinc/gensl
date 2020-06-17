@@ -1,0 +1,8 @@
+(library
+ (name gensl)
+ (public_name kxcteam-gensl)
+ (wrapped false)
+ (libraries kxclib base64)
+ (preprocess (pps kxclib.ppx))
+ (flags (:standard
+          -open Kxclib)))

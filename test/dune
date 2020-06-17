@@ -1,0 +1,7 @@
+(library
+ (name gensltests)
+ (inline_tests)
+ (libraries str kxclib gensl)
+ (preprocess (pps kxclib.ppx ppx_inline_test))
+ (flags (:standard
+          -open Kxclib)))
