@@ -9,8 +9,8 @@
 
 ## Postfix
 
-1 2 3 4 list ..    ==>  (list 1 2 3 4)  <-- postfix grab-all
-1 2 . 3 4 list ..  ==>  1 2 (list 3 4)  <-- postfix grab-point then grab-all
+list 1 2 3 4 ..    ==>  (list 1 2 3 4)  <-- postfix grab-all
+list 1 2 . 3 4 ..  ==>  list 1 2 (3 4)  <-- postfix grab-point then grab-all
 1 2 .list          ==>  1 (list 2)      <-- postfix grab-one
 1 2 3 4 .3.list    ==>  1 (list 2 3 4)  <-- postfix grab-k
 
