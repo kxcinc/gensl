@@ -2,9 +2,9 @@
 ## Commonfix: the default mode. basically just s-expression
 ## Prefix
 
-,, list 1 2 3 4  ==>  (list 1 2 3 4)  <-- prefix grab-all
-,list 1 2        ==>  (list 1) 2      <-- prefix grab-one
-,3.list 1 2 3 4  ==>  (list 1 2 3) 4  <-- prefix grab-k
+,, list 1 2 3 4  ==>  (list 1 2 3 4)  <-- prefix pick-all
+,list 1 2        ==>  (list 1) 2      <-- prefix pick-one
+,3.list 1 2 3 4  ==>  (list 1 2 3) 4  <-- prefix pick-k
 
 
 ## Postfix
