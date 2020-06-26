@@ -1,128 +1,109 @@
-type 'a equality = 'a -> 'a -> bool
-type ('a, 'b) assoc = ('a*'b) list*('a equality)
-type 'a set = ('a list)*('a equality)
+(* file    : gensl.ml
+   created : 2020-06-26 *)
 
-module Datatree = struct
-  type datum =
-    | Atom of atom
-    | Annotated of datum set*datum
-    | Form of
-        { psnodes : node list;          (** positional nodes *)
-          kwnodes : (kw, node) assoc; } (** keyword nodes *)
-  and  node =
-    | DatumNode of datum        (** datum node *)
-    | AnnoNode of datum         (** annotation node *)
-  and  kw = KW of string
-  and  atom =
+module Basetypes = struct
+  type 'a equality = 'a -> 'a -> bool
+  type ('a, 'b) assoc = ('a*'b) list*('a equality)
+  type 'a set = ('a list)*('a equality)
+
+  type atom =
      | SymbolAtom of string
      | StringAtom of string
      | BytesAtom of bytes
      | NumericAtom of string*string (** (pair numeric suffix) *)
-
-  let datum_equality = (=)
-  let keyword_equality : kw equality = (=)
-  let annotation_equality _ _ = false
-
-  let pp_kw ppf (KW kw) = Format.fprintf ppf ":%s" kw
-  let pp_atom ppf =
-    let open Format in
-    let pstr = pp_print_string ppf in
-    let printf = fprintf ppf in
-    function
-     (* XXX handle complex symbols *)
-     | SymbolAtom str -> pstr str
-     (* XXX better display for very complex strings *)
-     | StringAtom str -> printf "\"%s\"" (String.escaped str)
-     | BytesAtom bytes -> printf "hex:%s" (Bytes.to_string  bytes |> Base64.encode_exn)
-     | NumericAtom (num, suffix) -> num^suffix |> pstr
-
-  module Atoms = struct
-    let symb x = Atom (SymbolAtom x)
-    let atom_of_int ?suffix x =
-      let suffix = Option.value ~default:"" suffix in
-      Atom (NumericAtom ((string_of_int x), suffix))
-  end
-
-  module StdSymbols = struct
-    open Atoms
-
-    let finlist = symb "finlist"
-    let karray = symb "karray"
-    let finset = symb "finset"
-    let finmap = symb "finmap"
-  end
+     | BoolAtom of bool
 end
 
 module Parsetree = struct
-  open Datatree
+  open Basetypes
 
-  type leading = Leading of string
+  type leading = Leading of string | NoLeadingInfo
   type ghost_source = ..
+  type span_source =
+    [ `File of string
+    | `DirectInput of string option
+    | `Ghost of ghost_source ]
   type 'l span = {
       span_start: 'l;
       span_end  : 'l;
       span_leading : leading;   (** leading spaces *)
-      span_source  : [ `File of string
-                     | `DirectInput of string option
-                     | `Ghost of ghost_source ];
+      span_source  : span_source;
     }
 
   type flat_location = { line: int; col: int; }
   type stream_location = int
-  type flat_span = flat_location span
-  type stream_span = stream_location span
 
   type parse_error = ..
 
   type syntax_mode =
-    | Commonfix | Phantomfix
-    | Prefix  of [ `GrabAll | `GrabOne | `GrabK of int ]
+    | Infix
+    | Prefix  of [ `PickAll | `PickOne | `PickK of int ]
     | Postfix of [ `GrabAll | `GrabOne | `GrabK of int ]
+    | Phantomfix
   type form_style =
     | ToplevelForm
     | SimpleForm                (**   ( .. ) *)
-    | FinlistForm               (**   [ .. ] *)
-    | KarrayForm of int option  (** #d[ .. ] *)
-    | FinmapForm                (**   { .. } *)
-    | FinsetForm                (**  #{ .. } *)
-  (* XXX support lexer_style *)
-  type lexer_style =
-    | DefaultLexer
-    | DataLexer     (**  lexp:.. *)
-    | HandlerLexer  (** ?lexp:.. *)
+    | NotAForm
 
   (** phantom elements,
       phantom in the sense that
       they don't semantically contribute to the Datatree *)
   type phantom = 
-    | GrabPoint (** .    - the postfix grab-point *)
-    | EndOfDoc  (** .||  - the end-of-doc mark *)
-    | Mapsto    (** ->   - the "mapsto arrow" *)
-    | SepComma  (** XXX, - the "separator comma" *)
-    | Hole of string option  (** ??name - a hole to be filled *)
+    | GrabPoint        (** .  - the postfix grab-point *)
+    | GrabAllOperator  (** .. - the postfix grab-all operator *)
+    | PickAllOperator  (** ,, - the prefix pick-all operator *)
     | ParseError of parse_error
 
+  type reader_style =
+    | DefaultReader
+    | DataReader of string  (**  lexp:.. *)
+
   type 'l pdatum =
-    | PAtom of 'l patom*lexer_style
-    | PAnnotated of { p_annotated  : 'l pdatum;
-                      p_anno_front : 'l pdatum list;
-                      p_anno_back  : 'l pdatum list; }
-    | PForm of (('l pnode list, 'l) pe*form_style*lexer_style, 'l) pe
+    | PAtom of 'l patom*reader_style
+    | PForm of ('l pnode list*form_style*reader_style, 'l) pelem
+    | PAnnotated of {
+        p_annotated  : 'l pdatum;
+        p_anno_front : 'l pdatum list;
+        p_anno_back  : 'l pdatum list; (** !!reversed *)
+      }
   and  'l pnode =
     | PDatumNode of 'l pdatum
     | PAnnoNode of 'l pdatum
-    | PKeywordNode of 'l pkw * 'l pdatum
-    | PPhantomNode of (phantom, 'l) pe
-  and  'l pkw = (kw, 'l) pe
-  and  'l patom = (atom, 'l) pe*[ `Source of string | `Intrinsic ]
+    | PKeywordNode of 'l pdatum * 'l pdatum
+    | PPhantomNode of (phantom, 'l) pelem
+  and  'l patom = (atom, 'l) pelem
 
-  and  ('x, 'l) pe = { elem: 'x; mode: syntax_mode; span: 'l span }
+  and  ('x, 'l) pelem = {
+      elem: 'x;
+      mode: syntax_mode;
+      span: 'l span
+    }
 
-  type 'x fpe = ('x, flat_location) pe
-  type 'x spe = ('x, stream_location) pe
+  let patom atom span mode : 'l patom = { elem = atom; span; mode; }
+  let pdatum_atom atom span mode style : 'l pdatum =
+    PAtom (patom atom span mode, style)
+  let pdatum_form nodes form_style reader_style span mode : 'l pdatum =
+    let elem = (nodes, form_style, reader_style) in
+    PForm { elem; span; mode; }
+  let pdatum_anno_front anno datum : 'l pdatum = match datum with
+    | PAnnotated ({ p_anno_front; _ } as r) ->
+       PAnnotated ({ r with p_anno_front = anno :: p_anno_front })
+    | _ -> PAnnotated {
+               p_annotated = datum;
+               p_anno_front = [anno];
+               p_anno_back = [];
+             }
+  let pdatum_anno_back anno datum : 'l pdatum = match datum with
+    | PAnnotated ({ p_anno_back; _ } as r) ->
+       PAnnotated ({ r with p_anno_back = anno :: p_anno_back })
+    | _ -> PAnnotated {
+               p_annotated = datum;
+               p_anno_front = [];
+               p_anno_back = [anno];
+             }
 end
 
-open Datatree
+open Basetypes
 open Parsetree
 
 type datafying_error = ..
@@ -131,113 +112,119 @@ exception Datafying_error of datafying_error
 type datafying_error +=
    | Datafying_noimpl
 
-open struct
-  let datum_set : datum list -> datum set = fun xs -> (xs, datum_equality)
-  let annotation_set : datum list -> datum set = fun xs -> (xs, annotation_equality)
+module ParserTypes = struct
+  type token =
+    | TkSymbol of string
+    | TkString of string
+    | TkBool of bool
+    | TkBytes of bytes
+    | TkNumeric of string*string
+    | TkParenOpen
+    | TkParenClose
+    | TkPickAll of bool | TkGrabAll of bool (* true if head-node exists *)
+    | TkPickK of bool*int | TkGrabK of bool*int
+    | TkPickOne of bool | TkGrabOne of bool
+    | TkGrabPoint
+    | TkKeywordIndicator
+    | TkAnnoNextIndicator
+    | TkAnnoPrevIndicator
+    | TkAnnoStandaloneIndicator
+
+  type ('buf, 'loc) pkont = 'loc pnode list -> ('loc pdatum, 'buf, 'loc) presult
+  and  ('buf, 'loc) picking_frame =
+    | PfPickAll of ('buf, 'loc) pkont
+    | PfPickK of int*('buf, 'loc) pkont
+  and  'loc frame_state = { pickduty : int; bucket : 'loc pdatum }
+  and  ('buf, 'loc) pstate = {
+      buf : 'buf;
+      pos : int;
+      frames : ('buf, 'loc) picking_frame*'loc frame_state ;
+    }
+  and  ('x, 'buf, 'loc) presult = ('x*('buf, 'loc) pstate, (parse_error*'loc span) list) result
 end
-[@@ocaml.warning "-32"]
+open ParserTypes
 
-(* XXX : report error and hole-phantoms - now they are simply ignored *)
-let rec datum_of_parsetree : 'l pdatum -> datum = function
-  | PAtom ({ elem; _ }, _) -> Atom elem
-  | PAnnotated { p_annotated = elem;
-                 p_anno_front = front;
-                 p_anno_back = back; } ->
-     let annotations =
-       let tr = List.map datum_of_parsetree in
-       (tr front) @ (tr back) |> annotation_set
-     in Annotated (annotations, (datum_of_parsetree elem))
-  | PForm { elem = ({ elem = nodes; _ }, style); _} ->
-     let psnodes : node list =
-       let rec loop acc = function
-         | [] -> acc
-         | PDatumNode datum :: rest ->
-            loop (DatumNode (datum_of_parsetree datum) :: acc) rest
-         | PAnnoNode datum :: rest ->
-            loop (AnnoNode (datum_of_parsetree datum) :: acc) rest
-         | _ :: rest -> loop acc rest
-       in loop [] nodes in
-     let kwnodes : (kw, node) assoc =
-       let rec loop acc = function
-         | [] -> acc
-         | PKeywordNode ({ elem = kw; _ }, datum) :: rest ->
-            loop ((kw, DatumNode (datum_of_parsetree datum)) :: acc) rest
-         | _ :: rest -> loop acc rest
-       in (loop [] nodes, keyword_equality) in
-     let psnodes =
-       let open Atoms in
-       let open StdSymbols in
-       match style with
-       | ToplevelForm | SimpleForm -> psnodes
-       | FinlistForm -> (DatumNode finlist) :: psnodes
-       | KarrayForm k ->
-          let k = Option.value ~default:1 k in
-          (DatumNode karray) :: (DatumNode (atom_of_int k)) :: psnodes
-       | FinmapForm -> (DatumNode finmap) :: psnodes
-       | FinsetForm -> (DatumNode finset) :: psnodes
-     in Form { psnodes; kwnodes; }
+module type Lexer = sig
+  type buffer
+  type location
 
-(* XXX support preserve_leadings *)
-let rec pp_parsetree ?preserve_leadings:_ ppf pdatum =
-  let open Format in
-  let print datum = pp_parsetree ppf datum; pp_print_space ppf () in
-  let mode = match pdatum with
-  | PAtom ({ mode; _ }, _) -> Some mode
-  | PForm { mode; _ } -> Some mode
-  | _ -> None in
-  let prefix = begin match mode with
-  | None | Some Commonfix | Some Phantomfix -> ""
-  | Some (Prefix `GrabAll) -> ",,"
-  | Some (Prefix `GrabOne) -> ","
-  | Some (Prefix (`GrabK k)) -> sprintf ",%d." k
-  | Some (Postfix `GrabAll) -> ".."
-  | Some (Postfix `GrabOne) -> "."
-  | Some (Postfix (`GrabK k)) -> sprintf ".%d." k
-  end in
-  pp_print_string ppf prefix;
-  match pdatum with
-  | PAtom (_, `Source src) -> pp_print_string ppf src
-  | PAtom ({ elem; _ }, `Intrinsic) -> pp_atom ppf elem
-  | PAnnotated { p_annotated = elem;
-                 p_anno_front = front;
-                 p_anno_back = back; } ->
-     (* XXX optimize space emission *)
-     List.iter print front;
-     print elem;
-     List.iter print back
-  | PForm { elem = ({ elem = nodes; _ }, style); _ } ->
-     let (opening, closing) = match style with
-       | ToplevelForm -> "", ""
-       | SimpleForm -> "(", ")"
-       | FinlistForm -> "[", "]"
-       | KarrayForm k -> begin
-           match k with
-           | Some k -> sprintf "#%d[" k, "]"
-           | None ->  "#[", "]"
-         end
-       | FinmapForm -> "{", "}"
-       | FinsetForm -> "#{", "}"
-     in
-     let print_node = function
-       | PDatumNode datum -> print datum
-       | PAnnoNode anno -> pp_print_string ppf "@@"; print anno
-       | PKeywordNode ({ elem = kw; _ }, datum) ->
-          pp_kw ppf kw;
-          pp_print_space ppf ();
-          print datum
-       | PPhantomNode { elem = phantom; _ } ->
-          let str = match phantom with
-            | GrabPoint -> "."
-            | EndOfDoc -> ".||"
-            | Mapsto -> "->"
-            | SepComma -> ","
-            | Hole var ->
-               let var = Option.value ~default:"" var in
-               "??" ^ var
-            | ParseError _err -> "<*parse_error*>"
-          in pp_print_string ppf str in
-     pp_print_string ppf opening;
-     pp_print_cut ppf ();
-     List.iter print_node nodes;
-     pp_print_cut ppf ();
-     pp_print_string ppf closing
+  val loc : buffer -> int -> location
+  val source : buffer -> span_source
+  val lexer : buffer -> int -> (token*leading, buffer, location) presult
+  (** [lexer buf pos] consume and returns next token from position [pos] *)
+end
+
+type parse_error +=
+ | Immature_ending_of_form
+ | Attempting_to_annotate_non_datum
+
+module Parser (Lexer : Lexer) = struct
+  open Lexer
+
+  type nonrec picking_frame = (buffer, location) picking_frame
+  type nonrec pkont = (buffer, location) pkont
+
+  type nonrec pdatum = location pdatum
+  type nonrec pnode = location pnode
+  type nonrec patom = location patom
+  type nonrec 'x pelem = ('x, location) pelem
+
+  type nonrec pstate = (buffer, location) pstate
+  type nonrec 'x presult = ('x, buffer, location) presult
+
+  let lexer { buf; pos; _ } = lexer buf pos
+
+  open struct
+    let (>>=) : 'x presult -> ('x*pstate -> 'y presult) -> 'y presult =
+      fun mx f ->
+      match mx with
+      | Ok (x,ps) -> f (x,ps)
+      | Error e -> Error e
+    let ok ps x = Ok (x,ps)
+    let fail err span : 'x presult = Error [err, span]
+  end
+
+  let rec read_datum : pstate -> pdatum presult =
+    fun ps ->
+    let span ps' leading =
+      let span_source = source ps.buf in
+      let span_start = loc ps.buf ps.pos in
+      let span_end = loc ps.buf ps'.pos in
+      { span_start; span_end; span_source; span_leading = leading }
+    in
+    let atom_clause (ps,leading) atom =
+       let span = span ps leading
+       in pdatum_atom atom span Infix DefaultReader |> ok ps
+    in
+    lexer ps >>= function
+    | (TkSymbol symb, leading), ps -> atom_clause (ps,leading) (SymbolAtom symb)
+    | (TkString str, leading), ps -> atom_clause (ps,leading) (StringAtom str)
+    | (TkBytes bytes, leading), ps -> atom_clause (ps,leading) (BytesAtom bytes)
+    | (TkNumeric (num,suffix), leading), ps -> atom_clause (ps,leading) (NumericAtom (num,suffix))
+    | (TkBool b, leading), ps -> atom_clause (ps,leading) (BoolAtom b)
+    | (TkParenOpen, leading), ps ->
+       let kont : pkont = fun nodes ->
+         pdatum_form nodes SimpleForm DefaultReader (span ps leading) Infix |> ok ps in
+       read_nodes (PfPickAll kont) ps
+    | (TkParenClose, leading), ps
+    | (TkPickAll _, leading), ps | (TkGrabAll _, leading), ps
+    | (TkPickK _, leading), ps | (TkGrabK _, leading), ps
+    | (TkPickOne _, leading), ps | (TkGrabOne _, leading), ps
+    | (TkGrabPoint, leading), ps
+    | (TkKeywordIndicator, leading), ps
+    | (TkAnnoPrevIndicator, leading), ps
+    | (TkAnnoStandaloneIndicator, leading), ps
+      -> fail Immature_ending_of_form (span ps leading)
+    | (TkAnnoNextIndicator, leading), ps ->
+       read_datum ps >>= fun (anno, ps') ->
+       let kont : pkont = function
+         | [node] ->
+            begin match node with
+            | PDatumNode datum -> pdatum_anno_front anno datum |> ok ps'
+            | _ -> fail Attempting_to_annotate_non_datum (span ps' leading)
+            end
+         | _ -> failwith ("panic: " ^ __LOC__)
+       in
+       read_nodes (PfPickK (1, kont)) ps'
+  and     read_nodes : picking_frame -> pstate -> pdatum presult = failwith "noimpl"
+end
