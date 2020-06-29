@@ -2,7 +2,7 @@
  (name gensl)
  (public_name kxcteam-gensl)
  (wrapped false)
- (libraries kxclib base64)
+ (libraries kxclib base64 sexplib)
  (preprocess (pps kxclib.ppx))
  (flags (:standard
           -open Kxclib)))

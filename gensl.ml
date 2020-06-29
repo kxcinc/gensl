@@ -103,6 +103,44 @@ module Parsetree = struct
              }
 end
 
+module ParsetreePrinter = struct
+  open Basetypes
+  open Parsetree
+  open Format
+  open Sexplib.Type
+  open Sexplib
+
+  let sexp_atom = function
+    | SymbolAtom str -> Atom ("symb:" ^ str)
+    | StringAtom str -> Atom ("str:" ^ str)
+    | BytesAtom bytes ->
+       let encoded = Bytes.to_string bytes |> Base64.encode_string
+       in Atom ("bytes:" ^ encoded)
+    | NumericAtom (num,suf) -> Atom (num^suf)
+    | BoolAtom b -> Atom (sprintf "bool:%b" b)
+  let sexp_patom { elem; _ } = sexp_atom elem
+
+  let rec sexp_pnode = function
+    | PDatumNode dtm -> sexp_pdatum dtm
+    | PAnnoNode dtm -> List [Atom "anno"; sexp_pdatum dtm]
+    | PKeywordNode (kw,value) -> List [Atom "kwnode"; sexp_pdatum kw; sexp_pdatum value]
+    | PPhantomNode _ -> Atom "somephantom"
+
+  and     sexp_pdatum = function
+    | PAtom (patom,_) -> sexp_patom patom
+    | PForm { elem = (nodes, _, _) ; _ } -> List (nodes |> List.map sexp_pnode)
+    | PAnnotated { p_annotated; p_anno_front; p_anno_back } ->
+       let l = [Atom "annotated"; p_annotated |> sexp_pdatum]
+               @ [Atom ":front"] @ (p_anno_front |> List.map sexp_pdatum)
+               @ [Atom ":back"] @ (List.rev p_anno_back |> List.map sexp_pdatum)
+       in List l
+
+  let composite f g x = f (g x)
+  let pp_patom ppf = composite (Sexp.pp_hum ppf) sexp_patom
+  let pp_atom ppf = composite (Sexp.pp_hum ppf) sexp_atom
+  let pp_pdatum ppf = composite (Sexp.pp_hum ppf) sexp_pdatum
+end
+
 open Basetypes
 open Parsetree
 
@@ -188,7 +226,7 @@ module Parser (Lexer : Lexer) = struct
     let lift_result ps : 'x kresult -> 'x presult = function
       | Ok x -> Ok (x, ps)
       | Error err -> Error err
-    module List = struct
+    module [@ocaml.warning "-32"] List = struct
       include List
       let split n : 'a list -> 'a list*'a list = fun l ->
         let rec loop l acc n =
