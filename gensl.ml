@@ -157,7 +157,7 @@ end
 type parse_error +=
  | Unexpected_ending_of_form
  | Immature_ending_of_form of int
- | No_enough_nodes_to_be_grab of { expected : int; available : int; }
+ | No_enough_nodes_to_grab of { expected : int; available : int; }
  | Attempting_to_annotate_non_datum
  | Previous_datum_to_annotate_not_exists
 
@@ -184,18 +184,20 @@ module Parser (Lexer : Lexer) = struct
     let fail span err : 'x presult = Error [err, span]
     let kont_ok x = Ok x
     let kont_fail span err : 'x kresult = Error [err, span]
+    (* XXX lift_result might not be a good name *)
     let lift_result ps : 'x kresult -> 'x presult = function
       | Ok x -> Ok (x, ps)
       | Error err -> Error err
     module List = struct
       include List
-      let take n : 'a list -> 'a list = fun l ->
+      let split n : 'a list -> 'a list*'a list = fun l ->
         let rec loop l acc n =
-          if n = 0 then (List.rev acc)
+          if n = 0 then (List.rev acc), l
           else match l with
                | hd :: tail -> loop tail (hd :: acc)(n-1)
                | [] -> raise (Invalid_argument "list too short")
         in loop l [] n
+      let take n : 'a list -> 'a list = fun l -> split n l |> fst
     end
   end
 
@@ -255,92 +257,93 @@ module Parser (Lexer : Lexer) = struct
     let rec loop duty bucket ps0 =
       let push_node node ps = loop (duty-1) (node :: bucket) ps in
       let push_datum datum ps = push_node (PDatumNode datum) ps in
-      if duty = 0 then kont (List.rev bucket) |> lift_result ps0
+      let finish_with_kont ps = kont (List.rev bucket) |> lift_result ps in
+      if duty = 0 then finish_with_kont ps0
       else begin
-          let rec go = function
-          | (TkParenClose, leading), ps ->
-             if duty > 0
-             then Immature_ending_of_form duty |> fail (span ps leading)
-             else kont (List.rev bucket) |> lift_result ps
-          | (TkPickAll false, leading), ps ->
-             let kont = kont_simple_form (span ps leading) (Prefix `PickAll) in
-             read_nodes (PfPickAll kont) ps >>= fun (datum, ps) ->
-             push_datum datum ps
-          | (TkPickAll true, leading), ps ->
-             read_datum ps >>= fun (head, ps) ->
-             let kont = kont_simple_form_head head (span ps leading) (Prefix `PickAll) in
-             read_nodes (PfPickAll kont) ps >>= fun (datum, ps) ->
-             push_datum datum ps
-          | (TkPickK (false, k), leading), ps ->
-             let kont = kont_simple_form (span ps leading) (Prefix (`PickK k)) in
-             read_nodes (PfPickK (k, kont)) ps >>= fun (datum, ps) ->
-             push_datum datum ps
-          | (TkPickK (true, k), leading), ps ->
-             read_datum ps >>= fun (head, ps) ->
-             let kont = kont_simple_form_head head (span ps leading) (Prefix (`PickK k)) in
-             read_nodes (PfPickK (k, kont)) ps >>= fun (datum, ps) ->
-             push_datum datum ps
-          (* XXX style_mode inaccurate: (`Pick/GrabK 1) vs `Pick/GrabOne *)
-          | (TkPickOne have_head, leading), ps ->
-             go ((TkPickK (have_head,1), leading), ps)
-          | (TkGrabAll false, leading), ps ->
-             let kont = kont_simple_form (span ps leading) (Postfix `GrabAll) in
-             kont (List.rev bucket) >>= fun datum ->
-             loop (duty+(List.length bucket)-1) [PDatumNode datum] ps
-          | (TkGrabAll true, leading), ps ->
-             read_datum ps >>= fun (head, ps) ->
-             let kont = kont_simple_form_head head (span ps leading) (Postfix `GrabAll) in
-             kont (List.rev bucket) >>= fun datum ->
-             loop (duty+(List.length bucket)-1) [PDatumNode datum] ps
-          | (TkGrabK (false, k), leading), ps ->
-             let kont = kont_simple_form (span ps leading) (Postfix (`GrabK k)) in
-             (try List.take k bucket |> kont_ok
-              with Invalid_argument _ ->
-                No_enough_nodes_to_be_grab {
-                    expected = k;
-                    available = (List.length bucket);
-                  } |> kont_fail (span ps leading)) >>= fun nodes ->
-             kont (List.rev nodes) >>= fun datum ->
-             loop (duty+k-1) [PDatumNode datum] ps
-          | (TkGrabK (true, k), leading), ps ->
-             read_datum ps >>= fun (head, ps) ->
-             let kont = kont_simple_form_head head (span ps leading) (Postfix (`GrabK k)) in
-             (try List.take k bucket |> kont_ok
-              with Invalid_argument _ ->
-                No_enough_nodes_to_be_grab {
-                    expected = k;
-                    available = (List.length bucket);
-                  } |> kont_fail (span ps leading)) >>= fun nodes ->
-             kont (List.rev nodes) >>= fun datum ->
-             loop (duty+k-1) [PDatumNode datum] ps
-          (* XXX style_mode inaccurate: (`Pick/GrabK 1) vs `Pick/GrabOne *)
-          | (TkGrabOne have_head, leading), ps ->
-             go ((TkGrabK (have_head,1), leading), ps)
-          (* XXX grab-point support *)
-          (* | (TkGrabPoint, leading), ps -> *)
-          | (TkKeywordIndicator, _leading), ps ->
-             read_datum ps >>= fun (kw, ps) ->
-             read_datum ps >>= fun (datum, ps) ->
-             let node = PKeywordNode (kw, datum)
-             in push_node node ps
-          | (TkAnnoPrevIndicator, leading), ps ->
-             read_datum ps >>= fun (anno, ps) ->
-             (* XXX there might be more corner cases that should be handled.. *)
-             begin match bucket with
-             | (PDatumNode datum) :: rbucket ->
-                let annotated = pdatum_anno_back anno datum in
-                let node = PDatumNode annotated in
-                loop duty (node :: rbucket) ps
-             | _ -> Previous_datum_to_annotate_not_exists |> fail (span ps leading)
-             end
-          | (TkAnnoStandaloneIndicator, _leading), ps ->
-             read_datum ps >>= fun (anno, ps) ->
-             let node = PAnnoNode anno in
-             push_node node ps
-          | _ ->
-             read_datum ps0 >>= fun (datum, ps) ->
-             push_datum datum ps
-          in lexer ps0 >>= go
+          let rec go mode lexer_result =
+            let mode m = Option.value ~default:m mode in
+            match lexer_result with
+            | (TkParenClose, leading), ps ->
+               if duty > 0
+               then Immature_ending_of_form duty |> fail (span ps leading)
+               else finish_with_kont ps
+            | (TkPickAll false, leading), ps ->
+               let kont = kont_simple_form (span ps leading) (Prefix `PickAll |> mode) in
+               read_nodes (PfPickAll kont) ps >>= fun (datum, ps) ->
+               push_datum datum ps
+            | (TkPickAll true, leading), ps ->
+               read_datum ps >>= fun (head, ps) ->
+               let kont = kont_simple_form_head head (span ps leading) (Prefix `PickAll |> mode) in
+               read_nodes (PfPickAll kont) ps >>= fun (datum, ps) ->
+               push_datum datum ps
+            | (TkPickK (false, k), leading), ps ->
+               let kont = kont_simple_form (span ps leading) (Prefix (`PickK k) |> mode) in
+               read_nodes (PfPickK (k, kont)) ps >>= fun (datum, ps) ->
+               push_datum datum ps
+            | (TkPickK (true, k), leading), ps ->
+               read_datum ps >>= fun (head, ps) ->
+               let kont = kont_simple_form_head head (span ps leading) (Prefix (`PickK k) |> mode) in
+               read_nodes (PfPickK (k, kont)) ps >>= fun (datum, ps) ->
+               push_datum datum ps
+            | (TkPickOne have_head, leading), ps ->
+               go (Some (Prefix `PickOne)) ((TkPickK (have_head,1), leading), ps)
+            | (TkGrabAll false, leading), ps ->
+               let kont = kont_simple_form (span ps leading) (Postfix `GrabAll |> mode) in
+               kont (List.rev bucket) >>= fun datum ->
+               loop (duty+(List.length bucket)-1) [PDatumNode datum] ps
+            | (TkGrabAll true, leading), ps ->
+               read_datum ps >>= fun (head, ps) ->
+               let kont = kont_simple_form_head head (span ps leading) (Postfix `GrabAll |> mode) in
+               kont (List.rev bucket) >>= fun datum ->
+               loop (duty+(List.length bucket)-1) [PDatumNode datum] ps
+            (* XXX standalone annotation nodes? *)
+            | (TkGrabK (false, k), leading), ps ->
+               let kont = kont_simple_form (span ps leading) (Postfix (`GrabK k) |> mode) in
+               (try List.split k bucket |> kont_ok
+                with Invalid_argument _ ->
+                  No_enough_nodes_to_grab {
+                      expected = k;
+                      available = (List.length bucket);
+                    } |> kont_fail (span ps leading)) >>= fun (nodes, rbucket) ->
+               kont (List.rev nodes) >>= fun datum ->
+               loop (duty+k-1) (PDatumNode datum :: rbucket) ps
+            | (TkGrabK (true, k), leading), ps ->
+               read_datum ps >>= fun (head, ps) ->
+               let kont = kont_simple_form_head head (span ps leading) (Postfix (`GrabK k) |> mode) in
+               (try List.split k bucket |> kont_ok
+                with Invalid_argument _ ->
+                  No_enough_nodes_to_grab {
+                      expected = k;
+                      available = (List.length bucket);
+                    } |> kont_fail (span ps leading)) >>= fun (nodes, rbucket) ->
+               kont (List.rev nodes) >>= fun datum ->
+               loop (duty+k-1) (PDatumNode datum :: rbucket) ps
+            | (TkGrabOne have_head, leading), ps ->
+               go (Some (Postfix `GrabOne)) ((TkGrabK (have_head,1), leading), ps)
+            (* XXX grab-point support *)
+            | (TkGrabPoint, _leading), _ps -> failwith "grab-point not supported yet"
+            | (TkKeywordIndicator, _leading), ps ->
+               read_datum ps >>= fun (kw, ps) ->
+               read_datum ps >>= fun (datum, ps) ->
+               let node = PKeywordNode (kw, datum)
+               in push_node node ps
+            | (TkAnnoPrevIndicator, leading), ps ->
+               read_datum ps >>= fun (anno, ps) ->
+               (* XXX there might be more corner cases that should be handled.. *)
+               begin match bucket with
+               | (PDatumNode datum) :: rbucket ->
+                  let annotated = pdatum_anno_back anno datum in
+                  let node = PDatumNode annotated in
+                  loop duty (node :: rbucket) ps
+               | _ -> Previous_datum_to_annotate_not_exists |> fail (span ps leading)
+               end
+            | (TkAnnoStandaloneIndicator, _leading), ps ->
+               read_datum ps >>= fun (anno, ps) ->
+               push_node (PAnnoNode anno) ps
+            | _ ->
+               read_datum ps0 >>= fun (datum, ps) ->
+               push_datum datum ps
+          in lexer ps0 >>= (go None)
         end
     in loop duty [] ps
 
