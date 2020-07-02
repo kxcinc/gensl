@@ -2,7 +2,11 @@
  (name gensl)
  (public_name kxcteam-gensl)
  (wrapped false)
- (libraries kxclib base64 sexplib)
- (preprocess (pps kxclib.ppx))
+ (libraries  kxclib base64 sexplib)
+ (preprocess (pps kxclib.ppx ppx_sexp_conv js_of_ocaml-ppx js_of_ocaml-ppx_deriving_json))
  (flags (:standard
-          -open Kxclib)))
+          -open Kxclib -g)))
+
+(ocamllex genslex)
+
+(vendored_dirs vendors)
