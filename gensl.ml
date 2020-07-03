@@ -14,6 +14,21 @@ module Basetypes = struct
      | BoolAtom of bool
 end
 
+module Queue : sig
+  type 'x t = private 'x list
+  val empty : 'x t
+  val add : 'x t -> 'x -> 'x t
+  val take : 'x t -> ('x * 'x t) option
+end = struct
+  type 'x t = 'x list
+  let empty = []
+  let add q x = x :: q
+  let take q = match List.rev q with
+    | hd :: rest -> Some (hd, List.rev rest)
+    | [] -> None
+end
+type 'x queue = 'x Queue.t
+
 module Parsetree = struct
   open Basetypes
 
@@ -155,6 +170,8 @@ module ParserTypes = struct
   let bytes_of_sexp _ = failwith "noimpl"
   let sexp_of_bytes _ = failwith "noimpl"
 
+  type lexer_error = ..
+
   type token =
     | TkSymbol of string
     | TkString of string
@@ -177,6 +194,7 @@ module ParserTypes = struct
     sexp_of_token tok
     |> Sexplib.Sexp.pp_hum ppf
 
+  type 'loc lexresult = (token*'loc span, lexer_error*'loc span) result
   type ('x, 'loc) kresult = ('x, (parse_error*'loc span) list) result
   type 'loc pkont = 'loc pnode list -> ('loc pdatum, 'loc) kresult
   type ('buf, 'loc) picking_frame =
@@ -185,6 +203,7 @@ module ParserTypes = struct
   type 'loc frame_state = { pickduty : int; bucket : 'loc pdatum }
   type ('buf, 'loc) pstate = {
       buf : 'buf;
+      withdrew : (token*'loc span) queue;
     }
   type ('x, 'buf, 'loc) presult = ('x*('buf, 'loc) pstate, (parse_error*'loc span) list) result
 end
@@ -197,7 +216,7 @@ module type Lexer = sig
 
   val loc : buffer -> location
   val source : buffer -> span_source
-  val lexer : buffer -> (token*leading, buffer, location) presult
+  val lexer : buffer -> location lexresult
   (** [lexer buf pos] consume and returns next token from position [pos] *)
 end
 
@@ -207,3 +226,4 @@ type parse_error +=
  | No_enough_nodes_to_grab of { expected : int; available : int; }
  | Attempting_to_annotate_non_datum
  | Previous_datum_to_annotate_not_exists
+ | Lexing_error of lexer_error

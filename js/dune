@@ -1,11 +1,20 @@
 (executable
  (name gensljs)
+ (modules gensljs)
  (public_name kxcteam-gensl.js)
  (libraries gensl kxclib)
  (preprocess (pps kxclib.ppx js_of_ocaml-ppx js_of_ocaml-ppx_deriving_json))
  (flags (:standard
           -open Kxclib -g))
  (modes byte))
+
+(executable
+ (name gensltry)
+ (modules gensltry)
+ (libraries gensl kxclib)
+ (preprocess (pps kxclib.ppx js_of_ocaml-ppx js_of_ocaml-ppx_deriving_json))
+ (flags (:standard
+          -open Kxclib -g)))
 
 (rule
   (targets gensljs.js)

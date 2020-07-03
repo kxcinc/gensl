@@ -56,9 +56,12 @@ module Lexer : Lexer with
   let source buf = `DirectInput (Some (loc buf).pos_fname)
   let lexer buf =
     let tok = token buf in
-    Ok ((tok,NoLeadingInfo), { buf })
+    let span = {
+        span_start = buf.lex_start_p;
+        span_end = buf.lex_curr_p;
+        span_leading = NoLeadingInfo;
+        span_source = source buf;
+      } in
+    Ok (tok,span)
 end
-
-let pstate (buf : Lexing.lexbuf) : Lexer.pstate = { buf }
-
 }
