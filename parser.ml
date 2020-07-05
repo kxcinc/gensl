@@ -49,9 +49,11 @@ module Make (Lexer : Lexer) = struct
   open struct
     let (>>=) = Result.bind
     let ok ps x = Ok (x,ps)
-    (* let fail span err : 'x presult = Error [err, span] *)
     exception Parse_error of parse_error
-    let fail _span err : 'x presult = raise (Parse_error err)
+    let fail span err : 'x presult =
+      if debugging
+      then raise (Parse_error err)
+      else Error [err, span]
     let kont_ok x = Ok x
     let kont_fail span err : 'x kresult = Error [err, span]
     (* XXX lift_result might not be a good name *)

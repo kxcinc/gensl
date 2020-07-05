@@ -29,8 +29,12 @@ rule token = parse
 | boolprefix "false" { TkBool false }
 (* XXX no TkBytes for now *)
 (* token TkNumeric *)
-(* XXX no suffix for now *)
-| digit+ as lxm { TkNumeric (lxm, "") }
+| ((['+' '-']? digit+ '.'? digit*) as num)
+  (alpha+ as suffix)?
+  { let suffix = Option.value ~default:"" suffix in TkNumeric (num, suffix) }
+| ((['+' '-']? digit+ '/' digit+) as num)
+  (alpha+ as suffix)?
+  { let suffix = Option.value ~default:"" suffix in TkNumeric (num, suffix) }
 
 | '(' { TkParenOpen }
 | ')' { TkParenClose }
