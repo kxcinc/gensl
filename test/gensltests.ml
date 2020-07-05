@@ -84,4 +84,12 @@ let%test "simple examples parses" =
   tryparse "(list nested 1 2 3 4 ..abc kk)";
   tryparse "(list nested 1 2 3 4 ..(abc 99 88) kk)";
   tryparse "(list nested 1 2 3 4 ..(abc 99 88))";
+  tryparse "(1 2 . 3 4 5 ..)";
+  tryparse "(1 2 . 3 4 5 .. )";
+  tryparse "(1 2 . 3 4 5 .. 6 7)";
+  tryparse "(1 2 . 3 4 5 .. 6 7 ..)";
+  tryparse "(1 2 . 3 4 5 .. 6 . 7 8 ..)";
+  tryparse "(1 . 2 . 3 4 5 .. 6 . 7 8 .. ..)";
+  tryparse "(1 ,, 1 2 3 ..)";
+  tryparse "(1 ,, 1 . 2 3 ..)";
   true

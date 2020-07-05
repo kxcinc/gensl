@@ -5,7 +5,7 @@ open Parsetree
 
 open ParserTypes
 
-let debugging = false
+let debugging = ref false
 
 module Make (Lexer : Lexer) = struct
   open Lexer
@@ -22,7 +22,7 @@ module Make (Lexer : Lexer) = struct
   type nonrec 'x kresult = ('x, location) kresult
 
   let debug_token' msg token_result =
-    if debugging then
+    if !debugging then
     let ppf = Format.std_formatter in
     let ((tok,_),_) = token_result in
     Format.(
@@ -30,7 +30,7 @@ module Make (Lexer : Lexer) = struct
       pp_token ppf tok; pp_print_newline ppf (); print_flush())
 
   let debug_token msg token_result =
-    if debugging then
+    if !debugging then
     let ppf = Format.std_formatter in
     let (tok,_) = token_result in
     Format.(
@@ -38,7 +38,7 @@ module Make (Lexer : Lexer) = struct
       pp_token ppf tok; pp_print_newline ppf (); print_flush())
 
   let debug_msg msg =
-    if debugging then
+    if !debugging then
     let ppf = Format.std_formatter in
     Format.(
       pp_print_string ppf msg;
@@ -51,7 +51,7 @@ module Make (Lexer : Lexer) = struct
     let ok ps x = Ok (x,ps)
     exception Parse_error of parse_error
     let fail span err : 'x presult =
-      if debugging
+      if !debugging
       then raise (Parse_error err)
       else Error [err, span]
     let kont_ok x = Ok x
@@ -137,15 +137,18 @@ module Make (Lexer : Lexer) = struct
     fun pf ps ->
     let (duty, kont) = pf in
     (* XXX spans might be inaccurate at several places *)
-    let rec loop (duty : pickduty) bucket ps0 =
-      debug_msg (Format.asprintf "entering loop (duty=%a, bucket.len=%d)"
-                   pp_pickduty duty (List.length bucket));
+    let rec loop duty buckets ps0 =
+      let bucketsize = buckets |> List.map List.length |> List.foldl (+) 0 in
+      let headbucket = List.hd buckets in
+      let restbuckets = List.tl buckets in
+      debug_msg (Format.asprintf "entering loop (duty=%a, buckets.len=%d, buckets[].size=%d)"
+                   pp_pickduty duty (List.length buckets) bucketsize);
       let dutyadj by = function PickK k -> PickK (k+by) | d -> d in
       let dutydec = dutyadj (-1) in
       let picktillend consuming = PickUntil (fun tok -> tok_form_ending tok, consuming) in
-      let push_node node ps = loop (dutydec duty) (node :: bucket) ps in
+      let push_node node ps = loop (dutydec duty) ((node :: headbucket) :: restbuckets) ps in
       let push_datum datum ps = push_node (PDatumNode datum) ps in
-      let finish_with_kont ps = kont (List.rev bucket) |> lift_result ps in
+      let finish_with_kont ps = kont (List.concat buckets |> List.rev) |> lift_result ps in
       match duty with
       | PickK duty when duty = 0 -> finish_with_kont ps0
       | _ -> begin
@@ -153,7 +156,7 @@ module Make (Lexer : Lexer) = struct
             (debug_token' "go lexer_result: " ((tok, span), ps));
             let mode m = Option.value ~default:m mode in
             match tok, duty with
-            | TkSpaces _, _ -> loop duty bucket ps0
+            | TkSpaces _, _ -> loop duty buckets ps0
             | tok, PickUntil delim when fst (delim tok) ->
                finish_with_kont (if snd (delim tok) then ps else (unlex (tok, span) ps))
             | tok, PickK k when tok_form_ending tok && k > 0 ->
@@ -181,44 +184,61 @@ module Make (Lexer : Lexer) = struct
                 | TkGrabAll ->
                    (* perform a lex ahead to determing whether there is a head-node *)
                    lex ps >>= begin function
-                   | ((TkSpaces _) as tok, span), ps
+                   | (TkSpaces _, span), ps ->
+                      (* no head-node *)
+                      let kont = kont_simple_form span (Postfix `GrabAll |> mode) in
+                      kont (List.rev headbucket) >>= fun datum ->
+                      loop (dutyadj (List.length headbucket - 1) duty)
+                        (match restbuckets with
+                         | [] -> [PDatumNode datum] :: []
+                         | hd :: tail -> (PDatumNode datum :: hd) :: tail)
+                        ps
                    | (tok, span), ps when tok_form_ending tok ->
+                      (* no head-node *)
                       let ps = unlex (tok, span) ps in
                       let kont = kont_simple_form span (Postfix `GrabAll |> mode) in
-                      kont (List.rev bucket) >>= fun datum ->
-                      loop (dutyadj (List.length bucket - 1) duty) [PDatumNode datum] ps
+                      kont (List.rev headbucket) >>= fun datum ->
+                      loop (dutyadj (List.length headbucket - 1) duty)
+                        (match restbuckets with
+                         | [] -> [PDatumNode datum] :: []
+                         | hd :: tail -> (PDatumNode datum :: hd) :: tail)
+                        ps
                    | tokspan, ps ->
+                      (* having head-node *)
                       let ps = unlex tokspan ps in
                       read_datum ps >>= fun (head, ps) ->
                       let kont = kont_simple_form_head head span (Postfix `GrabAll |> mode) in
-                      kont (List.rev bucket) >>= fun datum ->
-                      loop (dutyadj (List.length bucket - 1) duty) [PDatumNode datum] ps
+                      kont (List.rev headbucket) >>= fun datum ->
+                      loop (dutyadj (List.length headbucket - 1) duty)
+                        (match restbuckets with
+                         | [] -> [PDatumNode datum] :: []
+                         | hd :: tail -> (PDatumNode datum :: hd) :: tail)
+                        ps
                    end
                 | TkGrabK (false, k) ->
                    let kont = kont_simple_form span (Postfix (`GrabK k) |> mode) in
-                   (try List.split k bucket |> kont_ok
+                   (try List.split k headbucket |> kont_ok
                     with Invalid_argument _ ->
                       No_enough_nodes_to_grab {
                           expected = k;
-                          available = (List.length bucket);
+                          available = (List.length headbucket);
                         } |> kont_fail span) >>= fun (nodes, rbucket) ->
                    kont (List.rev nodes) >>= fun datum ->
-                   loop (dutyadj (k-1) duty) (PDatumNode datum :: rbucket) ps
+                   loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
                 | TkGrabK (true, k) ->
                    read_datum ps >>= fun (head, ps) ->
                    let kont = kont_simple_form_head head span (Postfix (`GrabK k) |> mode) in
-                   (try List.split k bucket |> kont_ok
+                   (try List.split k headbucket |> kont_ok
                     with Invalid_argument _ ->
                       No_enough_nodes_to_grab {
                           expected = k;
-                          available = (List.length bucket);
+                          available = (List.length headbucket);
                         } |> kont_fail span) >>= fun (nodes, rbucket) ->
                    kont (List.rev nodes) >>= fun datum ->
-                   loop (dutyadj (k-1) duty) (PDatumNode datum :: rbucket) ps
+                   loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
                 | TkGrabOne have_head ->
                    go (Some (Postfix `GrabOne)) ((TkGrabK (have_head,1), span), ps)
-                (* XXX grab-point support *)
-                | TkGrabPoint -> failwith "grab-point not supported yet"
+                | TkGrabPoint -> loop duty ([] :: buckets) ps
                 | TkKeywordIndicator ->
                    read_datum ps >>= fun (kw, ps) ->
                    read_datum ps >>= fun (datum, ps) ->
@@ -227,11 +247,11 @@ module Make (Lexer : Lexer) = struct
                 | TkAnnoPrevIndicator ->
                    read_datum ps >>= fun (anno, ps) ->
                    (* XXX there might be more corner cases that should be handled.. *)
-                   begin match bucket with
+                   begin match headbucket with
                    | (PDatumNode datum) :: rbucket ->
                       let annotated = pdatum_anno_back anno datum in
                       let node = PDatumNode annotated in
-                      loop duty (node :: rbucket) ps
+                      loop duty ((node :: rbucket) :: restbuckets) ps
                    | _ -> Previous_datum_to_annotate_not_exists |> fail span
                    end
                 | TkAnnoStandaloneIndicator ->
@@ -244,7 +264,7 @@ module Make (Lexer : Lexer) = struct
               end
           in lex ps0 >>= (go None)
         end
-    in loop duty [] ps
+    in loop duty [[]] ps
 
   and kont_simple_form span mode : pkont = fun nodes ->
     pdatum_form nodes SimpleForm DefaultReader span mode |> kont_ok
