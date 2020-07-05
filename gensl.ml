@@ -10,9 +10,12 @@ module Basetypes = struct
      | SymbolAtom of string
      | StringAtom of string
      | BytesAtom of bytes
-     | NumericAtom of string*string (** (pair numeric suffix) *)
+     | NumericAtom of string*string (** [numeric, suffix] *)
      | BoolAtom of bool
 end
+
+(* XXX ASCII sanity check/unicode normalization (NFC) on StringAtom *)
+(* XXX SymbolAtom could only be alphanumeric so fine for now (NFKC in the future) *)
 
 (* XXX conversion between the four representations *)
 
@@ -22,8 +25,8 @@ module Canonicaltree = struct
   type cdatum =
     | CAtom of atom
     | CForm of {
-        cpos : cdatum list;
         ckwd : (cdatum, cdatum) assoc;
+        cpos : cdatum list;
       }
 
   (* XXX sexp_* and pp_* *)
@@ -35,8 +38,8 @@ module Normaltree = struct
   type ndatum =
     | NAtom of atom
     | NForm of {
-        n_positionals : ndatum list;
         n_keywordeds  : (ndatum, ndatum) assoc;
+        n_positionals : ndatum list;
         n_annotations : ndatum set;
       }
     | NAnnotated of ndatum * ndatum set
@@ -56,9 +59,9 @@ module Datatree = struct
         d_anno_back : ddatum list;
       }
   and  dnode =
+    | DKeywordNode of ddatum * ddatum
     | DDatumNode of ddatum
     | DAnnoNode of ddatum
-    | DKeywordNode of ddatum * ddatum
 
   (* XXX sexp_* and pp_* *)
 end
@@ -116,9 +119,9 @@ module Parsetree = struct
         p_anno_back  : 'l pdatum list; (** !!reversed *)
       }
   and  'l pnode =
+    | PKeywordNode of 'l pdatum * 'l pdatum
     | PDatumNode of 'l pdatum
     | PAnnoNode of 'l pdatum
-    | PKeywordNode of 'l pdatum * 'l pdatum
     | PPhantomNode of (phantom, 'l) pelem
   and  'l patom = (atom, 'l) pelem
 
@@ -150,8 +153,11 @@ module Parsetree = struct
                p_anno_front = [];
                p_anno_back = [anno];
              }
+
+(* XXX unparse_datum *)
 end
 
+(* XXX move ParsetreePrinter into Parsetree *)
 module ParsetreePrinter = struct
   open Basetypes
   open Parsetree
