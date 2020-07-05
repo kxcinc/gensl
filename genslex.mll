@@ -9,41 +9,47 @@ open Parsetree
 open ParserTypes
 }
 
+let digit = ['0'-'9']
+let lowercase = ['a'-'z']
+let uppercase = ['A'-'Z']
+let alpha = lowercase | uppercase
+let alphadigit = alpha | digit
+let space = [' ' '\t' '\n']
+
+let boolprefix = "b:" | "bool:"
+
 rule token = parse
-  ([' ' '\t' '\n']+ as lxm) { TkSpaces lxm }
+  (space+ as lxm) { TkSpaces lxm }
 (* token TkSymbol *)
-| (['a'-'z'] ['a'-'z' '0'-'9']* as lxm) { TkSymbol lxm }
+| (lowercase alphadigit* as lxm) { TkSymbol lxm }
 (* token TkString *)
 | '"' ([^ '"']* as lxm) '"' { TkString lxm }
 (* token TkBool *)
-| "b:true" { TkBool true }
-| "b:false" { TkBool false }
+| boolprefix "true" { TkBool true }
+| boolprefix "false" { TkBool false }
 (* XXX no TkBytes for now *)
 (* token TkNumeric *)
 (* XXX no suffix for now *)
-| ['0'-'9']+ as lxm { TkNumeric (lxm, "") }
+| digit+ as lxm { TkNumeric (lxm, "") }
 
 | '(' { TkParenOpen }
 | ')' { TkParenClose }
 
-| "," (['0'-'9']+ as k) { TkPickK (false, int_of_string k) }
-| "." (['0'-'9']+ as k) { TkGrabK (false, int_of_string k) }
-| "," (['0'-'9']+ as k) "." { TkPickK (true, int_of_string k) }
-| "." (['0'-'9']+ as k) "." { TkGrabK (true, int_of_string k) }
+| "," (digit+ as k) { TkPickK (false, int_of_string k) }
+| "." (digit+ as k) { TkGrabK (false, int_of_string k) }
+| "," (digit+ as k) "." { TkPickK (true, int_of_string k) }
+| "." (digit+ as k) "." { TkGrabK (true, int_of_string k) }
 | "," { TkPickOne true }
 | "." { TkGrabOne true }
 (* XXX no head-node for GrabAll for now *)
 | ",," { TkPickAll }
 | ".." { TkGrabAll }
-| "." [' ' '\t' '\n'] { TkGrabPoint }
+| "." space { TkGrabPoint }
 
 | ":" { TkKeywordIndicator }
 | "@>" { TkAnnoNextIndicator }
 | "@<" { TkAnnoPrevIndicator }
 | "@" { TkAnnoStandaloneIndicator }
-
-and  whitespace kont = parse
-  ([' ' '\t' '\n']+ as lxm) { kont lexbuf lxm }
 
 {
 
