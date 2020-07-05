@@ -197,15 +197,23 @@ module ParserTypes = struct
   type 'loc lexresult = (token*'loc span, lexer_error*'loc span) result
   type ('x, 'loc) kresult = ('x, (parse_error*'loc span) list) result
   type 'loc pkont = 'loc pnode list -> ('loc pdatum, 'loc) kresult
-  type ('buf, 'loc) picking_frame =
-    | PfPickAll of 'loc pkont
-    | PfPickK of int*('loc pkont)
+
+  type ('buf, 'loc) picking_frame = pickduty*'loc pkont
+
+  and pickduty =
+    | PickK of int
+    | PickUntil of (token -> bool*bool) (** [token] -> [stop?, consume?] *)
+
   type 'loc frame_state = { pickduty : int; bucket : 'loc pdatum }
   type ('buf, 'loc) pstate = {
       buf : 'buf;
       withdrew : (token*'loc span) queue;
     }
   type ('x, 'buf, 'loc) presult = ('x*('buf, 'loc) pstate, (parse_error*'loc span) list) result
+
+  let pp_pickduty ppf = Format.(function
+    | PickK k -> fprintf ppf "Pick(%d)" k
+    | PickUntil _ -> fprintf ppf "PickUntil(_)")
 end
 open ParserTypes
 
@@ -222,7 +230,7 @@ end
 
 type parse_error +=
  | Unexpected_ending_of_form
- | Immature_ending_of_form of int
+ | Immature_ending_of_form of pickduty
  | No_enough_nodes_to_grab of { expected : int; available : int; }
  | Attempting_to_annotate_non_datum
  | Previous_datum_to_annotate_not_exists
