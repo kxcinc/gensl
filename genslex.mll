@@ -68,7 +68,6 @@ rule token = parse
 | "." (digit+ as k) "." { TkGrabK (true, int_of_string k) }
 | "," { TkPickOne true }
 | "." { TkGrabOne true }
-(* XXX no head-node for GrabAll for now *)
 | ",," { TkPickAll }
 | ".." { TkGrabAll }
 | "." space { TkGrabPoint }
