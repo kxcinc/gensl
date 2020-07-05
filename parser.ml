@@ -73,7 +73,7 @@ module Make (Lexer : Lexer) = struct
 
 
   let rec read_datum : pstate -> pdatum presult =
-    Format.(printf "entering read_datum\n"; print_flush());
+    (* Format.(printf "entering read_datum\n"; print_flush()); *)
     fun ps ->
     let span _ps' leading =
       let span_source = source ps.buf in
@@ -86,7 +86,7 @@ module Make (Lexer : Lexer) = struct
        in pdatum_atom atom span Infix DefaultReader |> ok ps
     in
     lex ps >>= fun (lexer_result, ps) ->
-    (debug_token "read_datum: " lexer_result);
+    (* (debug_token "read_datum: " lexer_result); *)
     match lexer_result, ps with
     | (TkSymbol symb, span), ps -> atom_clause (ps,span.span_leading) (SymbolAtom symb)
     | (TkString str, span), ps -> atom_clause (ps,span.span_leading) (StringAtom str)
@@ -123,23 +123,23 @@ module Make (Lexer : Lexer) = struct
       | PfPickK (k, kont) -> (k, kont) in
     (* XXX spans might be inaccurate at several places *)
     let rec loop duty bucket ps0 =
-      Format.(printf "entering loop (duty=%d, bucket.len=%d)\n" duty (List.length bucket); print_flush());
+      (* Format.(printf "entering loop (duty=%d, bucket.len=%d)\n" duty (List.length bucket); print_flush()); *)
       let push_node node ps = loop (duty-1) (node :: bucket) ps in
       let push_datum datum ps = push_node (PDatumNode datum) ps in
       let finish_with_kont ps = kont (List.rev bucket) |> lift_result ps in
       if duty = 0 then finish_with_kont ps0
       else begin
           let rec go mode lexer_result =
-            (debug_token' "go lexer_result: " lexer_result);
+            (* (debug_token' "go lexer_result: " lexer_result); *)
             let mode m = Option.value ~default:m mode in
             match lexer_result with
             | (TkParenClose, span), ps ->
                if duty > 0
                then (
-                 Format.(printf "%s\n" __LOC__; print_flush());
+                 (* Format.(printf "%s\n" __LOC__; print_flush()); *)
                  Immature_ending_of_form duty |> fail span)
                else (
-                 Format.(printf "%s\n" __LOC__; print_flush());
+                 (* Format.(printf "%s\n" __LOC__; print_flush()); *)
                  finish_with_kont ps)
             | (TkPickAll false, span), ps ->
                let kont = kont_simple_form span (Prefix `PickAll |> mode) in
@@ -215,7 +215,7 @@ module Make (Lexer : Lexer) = struct
                read_datum ps >>= fun (anno, ps) ->
                push_node (PAnnoNode anno) ps
             | tok, ps ->
-               Format.(printf "%s\n" __LOC__; print_flush());
+               (* Format.(printf "%s\n" __LOC__; print_flush()); *)
                read_datum (unlex tok ps) >>= fun (datum, ps) ->
                push_datum datum ps
           in lex ps0 >>= (go None)
