@@ -2,6 +2,7 @@
 [@@@ocaml.warning "-33"]
 
 open Gensl
+open Parsing
 
 open Basetypes
 open Parsetree
