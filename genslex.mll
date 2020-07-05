@@ -18,10 +18,13 @@ let uppercase = ['A'-'Z']
 let alpha = lowercase | uppercase
 let alphadigit = alpha | digit
 let space = [' ' '\t' '\n']
+let base64alphabet = alphadigit | ['+' '/' '=']
+let base64digit = base64alphabet base64alphabet base64alphabet base64alphabet
 
 (* per ocaml lexing rules *)
 (* ref: https://caml.inria.fr/pub/docs/manual-ocaml/lex.html#sss:character-literals *)
 (* XXX \o000 not supported now due to limits of Scanf.unescaped *)
+(* XXX implement [unscape] in-house for oc/js compatibility *)
 let escape = '\\' (['"' '\\' '\'' 'n' 'r' 't' 'b' ' '] |
                    (digit digit digit) |
                    ('x' hexbyte)
@@ -30,6 +33,9 @@ let escape = '\\' (['"' '\\' '\'' 'n' 'r' 't' 'b' ' '] |
 let instring = [^ '"' '\\'] | escape
 
 let boolprefix = "b:" | "bool:"
+let hexprefix = "hex:"
+let base64prefix = "b64:" | "base64:"
+let strbytesprefix = "strbytes:"
 
 rule token = parse
   (space+ as lxm) { TkSpaces lxm }
@@ -40,7 +46,6 @@ rule token = parse
 (* token TkBool *)
 | boolprefix "true" { TkBool true }
 | boolprefix "false" { TkBool false }
-(* XXX no TkBytes for now *)
 (* token TkNumeric *)
 | ((['+' '-']? digit+ '.'? digit*) as num)
   (alpha+ as suffix)?
@@ -48,6 +53,11 @@ rule token = parse
 | ((['+' '-']? digit+ '/' digit+) as num)
   (alpha+ as suffix)?
   { let suffix = Option.value ~default:"" suffix in TkNumeric (num, suffix) }
+
+(* TkBytes *)
+| hexprefix (hexbyte+ as lxm) { TkBytes (Hex.to_bytes (`Hex lxm)) }
+| base64prefix (base64digit+ as lxm) { TkBytes (Base64.decode_exn lxm |> Bytes.of_string) }
+| strbytesprefix '"' (instring* as lxm) '"' { TkBytes (Scanf.unescaped lxm |> Bytes.of_string) }
 
 | '(' { TkParenOpen }
 | ')' { TkParenClose }

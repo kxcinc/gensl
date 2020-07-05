@@ -129,7 +129,7 @@ module ParsetreePrinter = struct
     | SymbolAtom str -> Atom ("symb:" ^ str)
     | StringAtom str -> Atom ("str:" ^ str)
     | BytesAtom bytes ->
-       let encoded = Bytes.to_string bytes |> Base64.encode_string
+       let encoded = Bytes.to_string bytes
        in Atom ("bytes:" ^ encoded)
     | NumericAtom (num,suf) -> Atom (num^suf)
     | BoolAtom b -> Atom (sprintf "bool:%b" b)
