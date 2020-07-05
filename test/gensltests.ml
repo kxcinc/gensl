@@ -48,5 +48,9 @@ let%test "simple examples parses" =
   tryparse "(list ,tok 1 2 3)";
   tryparse "(list ,2.tok 1 2 3)";
   tryparse "(list ,,nested 1 2 3 4)";
+  tryparse "(list nested 1 2 3 4 ..)";
   tryparse "(list nested 1 2 3 4 ..abc)";
+  tryparse "(list nested 1 2 3 4 ..abc kk)";
+  tryparse "(list nested 1 2 3 4 ..(abc 99 88) kk)";
+  tryparse "(list nested 1 2 3 4 ..(abc 99 88))";
   true

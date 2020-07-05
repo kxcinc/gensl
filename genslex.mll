@@ -10,7 +10,7 @@ open ParserTypes
 }
 
 rule token = parse
-  [' ' '\t' '\n'] { token lexbuf }
+  ([' ' '\t' '\n']+ as lxm) { TkSpaces lxm }
 (* token TkSymbol *)
 | (['a'-'z'] ['a'-'z' '0'-'9']* as lxm) { TkSymbol lxm }
 (* token TkString *)
@@ -34,7 +34,7 @@ rule token = parse
 | "." { TkGrabOne true }
 (* XXX no head-node for GrabAll for now *)
 | ",," { TkPickAll }
-| ".." { TkGrabAll false }
+| ".." { TkGrabAll }
 | "." [' ' '\t' '\n'] { TkGrabPoint }
 
 | ":" { TkKeywordIndicator }

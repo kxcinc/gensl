@@ -173,6 +173,7 @@ module ParserTypes = struct
   type lexer_error = ..
 
   type token =
+    | TkSpaces of string
     | TkSymbol of string
     | TkString of string
     | TkBool of bool
@@ -180,8 +181,7 @@ module ParserTypes = struct
     | TkNumeric of string*string
     | TkParenOpen
     | TkParenClose
-    | TkPickAll
-    | TkGrabAll of bool (* true if head-node exists *)
+    | TkPickAll | TkGrabAll
     | TkPickK of bool*int | TkGrabK of bool*int
     | TkPickOne of bool | TkGrabOne of bool
     | TkGrabPoint

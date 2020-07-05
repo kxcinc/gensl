@@ -102,6 +102,7 @@ module Make (Lexer : Lexer) = struct
     lex ps >>= fun (lexer_result, ps) ->
     (debug_token "read_datum: " lexer_result);
     match lexer_result, ps with
+    | (TkSpaces _, _), ps -> read_datum ps
     | (TkSymbol symb, span), ps -> atom_clause (ps,span.span_leading) (SymbolAtom symb)
     | (TkString str, span), ps -> atom_clause (ps,span.span_leading) (StringAtom str)
     | (TkBytes bytes, span), ps -> atom_clause (ps,span.span_leading) (BytesAtom bytes)
@@ -111,7 +112,7 @@ module Make (Lexer : Lexer) = struct
        let kont = kont_simple_form span Infix
        in read_nodes (PickUntil (fun tok -> tok = TkParenClose, true), kont) ps
     | (TkParenClose, span), _ps
-    | (TkPickAll, span), _ps | (TkGrabAll _, span), _ps
+    | (TkPickAll, span), _ps | (TkGrabAll, span), _ps
     | (TkPickK _, span), _ps | (TkGrabK _, span), _ps
     | (TkPickOne _, span), _ps | (TkGrabOne _, span), _ps
     | (TkGrabPoint, span), _ps
@@ -150,6 +151,7 @@ module Make (Lexer : Lexer) = struct
             (debug_token' "go lexer_result: " ((tok, span), ps));
             let mode m = Option.value ~default:m mode in
             match tok, duty with
+            | TkSpaces _, _ -> loop duty bucket ps0
             | tok, PickUntil delim when fst (delim tok) ->
                finish_with_kont (if snd (delim tok) then ps else (unlex (tok, span) ps))
             | tok, PickK k when tok_form_ending tok && k > 0 ->
@@ -174,16 +176,22 @@ module Make (Lexer : Lexer) = struct
                    push_datum datum ps
                 | TkPickOne have_head ->
                    go (Some (Prefix `PickOne)) ((TkPickK (have_head,1), span), ps)
-                | TkGrabAll false ->
-                   let kont = kont_simple_form span (Postfix `GrabAll |> mode) in
-                   kont (List.rev bucket) >>= fun datum ->
-                   loop (dutyadj (List.length bucket - 1) duty) [PDatumNode datum] ps
-                | TkGrabAll true ->
-                   read_datum ps >>= fun (head, ps) ->
-                   let kont = kont_simple_form_head head span (Postfix `GrabAll |> mode) in
-                   kont (List.rev bucket) >>= fun datum ->
-                   loop (dutyadj (List.length bucket - 1) duty) [PDatumNode datum] ps
-                (* XXX standalone annotation nodes? *)
+                | TkGrabAll ->
+                   (* perform a lex ahead to determing whether there is a head-node *)
+                   lex ps >>= begin function
+                   | ((TkSpaces _) as tok, span), ps
+                   | (tok, span), ps when tok_form_ending tok ->
+                      let ps = unlex (tok, span) ps in
+                      let kont = kont_simple_form span (Postfix `GrabAll |> mode) in
+                      kont (List.rev bucket) >>= fun datum ->
+                      loop (dutyadj (List.length bucket - 1) duty) [PDatumNode datum] ps
+                   | tokspan, ps ->
+                      let ps = unlex tokspan ps in
+                      read_datum ps >>= fun (head, ps) ->
+                      let kont = kont_simple_form_head head span (Postfix `GrabAll |> mode) in
+                      kont (List.rev bucket) >>= fun datum ->
+                      loop (dutyadj (List.length bucket - 1) duty) [PDatumNode datum] ps
+                   end
                 | TkGrabK (false, k) ->
                    let kont = kont_simple_form span (Postfix (`GrabK k) |> mode) in
                    (try List.split k bucket |> kont_ok
