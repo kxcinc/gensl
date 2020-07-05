@@ -43,4 +43,10 @@ let%test "simple examples parses" =
   tryparse "(do abc @< 10)";
   tryparse "(do @abc 10)";
   tryparse "(b:true b:false)";
+  tryparse "(list 1 2 3 .tok)";
+  tryparse "(list 1 2 3 .2.tok)";
+  tryparse "(list ,tok 1 2 3)";
+  tryparse "(list ,2.tok 1 2 3)";
+  tryparse "(list ,,nested 1 2 3 4)";
+  tryparse "(list nested 1 2 3 4 ..abc)";
   true

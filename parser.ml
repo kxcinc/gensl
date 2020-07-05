@@ -111,7 +111,7 @@ module Make (Lexer : Lexer) = struct
        let kont = kont_simple_form span Infix
        in read_nodes (PickUntil (fun tok -> tok = TkParenClose, true), kont) ps
     | (TkParenClose, span), _ps
-    | (TkPickAll _, span), _ps | (TkGrabAll _, span), _ps
+    | (TkPickAll, span), _ps | (TkGrabAll _, span), _ps
     | (TkPickK _, span), _ps | (TkGrabK _, span), _ps
     | (TkPickOne _, span), _ps | (TkGrabOne _, span), _ps
     | (TkGrabPoint, span), _ps
@@ -159,13 +159,8 @@ module Make (Lexer : Lexer) = struct
             | _ -> begin
                 match tok with
                 | tok when tok_form_ending tok -> failwith ("panic @"^__LOC__)
-                | TkPickAll false ->
+                | TkPickAll ->
                    let kont = kont_simple_form span (Prefix `PickAll |> mode) in
-                   read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
-                   push_datum datum ps
-                | TkPickAll true ->
-                   read_datum ps >>= fun (head, ps) ->
-                   let kont = kont_simple_form_head head span (Prefix `PickAll |> mode) in
                    read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
                    push_datum datum ps
                 | TkPickK (false, k) ->

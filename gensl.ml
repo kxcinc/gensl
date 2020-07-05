@@ -180,7 +180,8 @@ module ParserTypes = struct
     | TkNumeric of string*string
     | TkParenOpen
     | TkParenClose
-    | TkPickAll of bool | TkGrabAll of bool (* true if head-node exists *)
+    | TkPickAll
+    | TkGrabAll of bool (* true if head-node exists *)
     | TkPickK of bool*int | TkGrabK of bool*int
     | TkPickOne of bool | TkGrabOne of bool
     | TkGrabPoint

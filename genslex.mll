@@ -26,20 +26,24 @@ rule token = parse
 | '(' { TkParenOpen }
 | ')' { TkParenClose }
 
-(* XXX no head-node for now *)
-| ",," { TkPickAll false }
-| ".." { TkGrabAll false }
 | "," (['0'-'9']+ as k) { TkPickK (false, int_of_string k) }
 | "." (['0'-'9']+ as k) { TkGrabK (false, int_of_string k) }
-| "," { TkPickOne false }
-| "." { TkGrabOne false }
-(* XXX this is weird *)
-| ".," { TkGrabPoint }
+| "," (['0'-'9']+ as k) "." { TkPickK (true, int_of_string k) }
+| "." (['0'-'9']+ as k) "." { TkGrabK (true, int_of_string k) }
+| "," { TkPickOne true }
+| "." { TkGrabOne true }
+(* XXX no head-node for GrabAll for now *)
+| ",," { TkPickAll }
+| ".." { TkGrabAll false }
+| "." [' ' '\t' '\n'] { TkGrabPoint }
 
 | ":" { TkKeywordIndicator }
 | "@>" { TkAnnoNextIndicator }
 | "@<" { TkAnnoPrevIndicator }
 | "@" { TkAnnoStandaloneIndicator }
+
+and  whitespace kont = parse
+  ([' ' '\t' '\n']+ as lxm) { kont lexbuf lxm }
 
 {
 
