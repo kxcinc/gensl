@@ -44,6 +44,11 @@ let badparse str =
 let%test "simple examples parses" =
   tryparse "1";
   tryparse "(i like \"strings\")";
+  tryparse "\"abc\"";
+  tryparse "\"a\\tbc\"";
+  tryparse "\"a\\\\bc\"";
+  tryparse "\"a\\tbc\"";
+  tryparse "\"a\\\"bc\"";
   tryparse "(1 2 3 +7 -6)";
   tryparse "(1. 0. 34447 3.254)";
   badparse ".32";

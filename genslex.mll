@@ -16,6 +16,9 @@ let alpha = lowercase | uppercase
 let alphadigit = alpha | digit
 let space = [' ' '\t' '\n']
 
+let escape = '\\' (lowercase | '"' | '\\')
+let instring = [^ '"' '\\'] | escape
+
 let boolprefix = "b:" | "bool:"
 
 rule token = parse
@@ -23,7 +26,7 @@ rule token = parse
 (* token TkSymbol *)
 | (lowercase alphadigit* as lxm) { TkSymbol lxm }
 (* token TkString *)
-| '"' ([^ '"']* as lxm) '"' { TkString lxm }
+| '"' (instring* as lxm) '"' { TkString (Scanf.unescaped lxm) }
 (* token TkBool *)
 | boolprefix "true" { TkBool true }
 | boolprefix "false" { TkBool false }
