@@ -49,6 +49,7 @@ let%test "simple examples parses" =
   tryparse "\"a\\\\bc\"";
   tryparse "\"a\\tbc\"";
   tryparse "\"a\\\"bc\"";
+  tryparse "\"\\x39\ \\133\"";
   tryparse "(1 2 3 +7 -6)";
   tryparse "(1. 0. 34447 3.254)";
   badparse ".32";

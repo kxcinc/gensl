@@ -10,13 +10,23 @@ open ParserTypes
 }
 
 let digit = ['0'-'9']
+let octal = ['0'-'7']
+let hexalphabet = ['0'-'9' 'a'-'f' 'A'-'F']
+let hexbyte = hexalphabet hexalphabet
 let lowercase = ['a'-'z']
 let uppercase = ['A'-'Z']
 let alpha = lowercase | uppercase
 let alphadigit = alpha | digit
 let space = [' ' '\t' '\n']
 
-let escape = '\\' (lowercase | '"' | '\\')
+(* per ocaml lexing rules *)
+(* ref: https://caml.inria.fr/pub/docs/manual-ocaml/lex.html#sss:character-literals *)
+(* XXX \o000 not supported now due to limits of Scanf.unescaped *)
+let escape = '\\' (['"' '\\' '\'' 'n' 'r' 't' 'b' ' '] |
+                   (digit digit digit) |
+                   ('x' hexbyte)
+                   (* | ('o' octal octal octal) *)
+               )
 let instring = [^ '"' '\\'] | escape
 
 let boolprefix = "b:" | "bool:"
