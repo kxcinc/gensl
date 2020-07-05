@@ -69,6 +69,8 @@ let%test "simple examples parses" =
   tryparse "(map :(list 123) 10)";
   tryparse "(do @> 10 abc)";
   tryparse "(do abc @< 10)";
+  tryparse "(do abc @< (list 10 20))";
+  tryparse "(do @> 10 @> 20 abc @< 30 @< 40)";
   tryparse "(do @abc 10)";
   tryparse "(b:true b:false)";
   tryparse "(bool:true bool:false)";
