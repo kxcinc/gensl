@@ -10,15 +10,15 @@ Version 0.1 Checklist
   - [x] positional and keyword nodes
   - [x] annotation nodes and annotated datum
   - [x] mixfix syntax
-  - [ ] shorthand symbol atoms
-  - [ ] complex form styles: list, vector, set, map
+  - [ ] shorthand symbol atoms (#1)
+  - [ ] complex form styles: list, vector, set, map (#2)
 - [ ] complete 4 representations (Parsetree, Datatree, Normaltree, Canonicaltree)
-  - [ ] pretty-printers for each representations
-  - [ ] forgetting and embedding functions between representations
-  - [ ] builder for each representation
-- [ ] migration to sedlex (no unicode support)
-- [ ] perfect unparse (Parsetree --> Wirestring)
-- [ ] ordering and equality
+  - [ ] pretty-printers for each representations (#3)
+  - [ ] forgetting and embedding functions between representations (#4)
+  - [ ] builder for each representation (#5)
+- [ ] migration to sedlex (no unicode support) (#6)
+- [ ] perfect unparse (Parsetree --> Wirestring) (#7)
+- [ ] ordering and equality (#8)
   - [ ] canonical ordering
   - [ ] structural equality + semantical equivalence
 - [ ] proper testing
