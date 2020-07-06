@@ -11,6 +11,7 @@ module ParserTypes = struct
   type lexer_error = ..
 
   type token =
+    | TkEof
     | TkSpaces of string
     | TkSymbol of string
     | TkString of string
@@ -68,6 +69,7 @@ module type Lexer = sig
 end
 
 type parse_error +=
+ | Unexpected_eof
  | Unexpected_ending_of_form
  | Immature_ending_of_form of pickduty
  | No_enough_nodes_to_grab of { expected : int; available : int; }

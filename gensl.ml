@@ -194,6 +194,15 @@ module ParsetreePrinter = struct
   let pp_patom ppf = composite (Sexp.pp_hum ppf) sexp_patom
   let pp_atom ppf = composite (Sexp.pp_hum ppf) sexp_atom
   let pp_pdatum ppf = composite (Sexp.pp_hum ppf) sexp_pdatum
+  let pp_toplevel ppf = function
+    | PForm { elem = (nodes, ToplevelForm,_); _ } ->
+       let open Format in
+       let len = List.length nodes in
+       pp_print_flush ppf();
+       nodes |> List.iteri (fun i node ->
+           Sexp.pp_hum ppf (sexp_pnode node);
+           if i+1 = len then pp_print_cut ppf() else pp_print_space ppf())
+    | datum -> pp_pdatum ppf datum; pp_print_cut ppf()
 end
 
 type datafying_error = ..

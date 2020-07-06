@@ -88,6 +88,11 @@ module Make (Lexer : Lexer) = struct
 
   let tok_form_ending = function
     | TkParenClose -> true
+    | TkEof -> true
+    | _ -> false
+
+  let tok_eof = function
+    | TkEof -> true
     | _ -> false
 
   let rec read_datum : pstate -> pdatum presult =
@@ -135,6 +140,7 @@ module Make (Lexer : Lexer) = struct
          | _ -> failwith ("panic: " ^ __LOC__)
        in
        read_nodes (PickK 1, kont) ps'
+    | (TkEof, span), _ -> Unexpected_eof |> fail span
   and     read_nodes : picking_frame -> pstate -> pdatum presult =
     fun pf ps ->
     let (duty, kont) = pf in
@@ -267,6 +273,17 @@ module Make (Lexer : Lexer) = struct
           in lex ps0 >>= (go None)
         end
     in loop duty [[]] ps
+
+  and  read_top ps =
+    let span _ps' leading =
+      let span_source = source ps.buf in
+      let span_start = loc ps.buf in
+      let span_end = loc ps.buf in
+      { span_start; span_end; span_source; span_leading = leading } in
+    let kont : pkont = function
+      | [PDatumNode datum] -> datum |> kont_ok
+      | nodes -> pdatum_form nodes ToplevelForm DefaultReader (span ps NoLeadingInfo) Infix |> kont_ok
+    in read_nodes (PickUntil (fun tok -> tok_eof tok, true), kont) ps
 
   and kont_simple_form span mode : pkont = fun nodes ->
     pdatum_form nodes SimpleForm DefaultReader span mode |> kont_ok

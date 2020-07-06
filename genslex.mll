@@ -39,7 +39,8 @@ let base64prefix = "b64:" | "base64:"
 let strbytesprefix = "strbytes:"
 
 rule token = parse
-  (space+ as lxm) { TkSpaces lxm }
+| eof { TkEof }
+| (space+ as lxm) { TkSpaces lxm }
 (* token TkSymbol *)
 | (lowercase alphadigit* as lxm) { TkSymbol lxm }
 (* token TkString *)
