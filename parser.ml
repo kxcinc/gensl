@@ -39,7 +39,7 @@ module Make (Lexer : Lexer) = struct
       pp_print_string ppf msg;
       pp_print_newline ppf (); print_flush())
 
-  open struct
+  open [@ocaml.warning "-32-33"] struct
     let (>>=) = Result.bind
     let ok ps x = Ok (x,ps)
     let fail err : 'x presult =
@@ -110,18 +110,18 @@ module Make (Lexer : Lexer) = struct
        in read_nodes (PickUntil (fun tok -> tok = TkParenClose, true), kont) ps
     (* XXX restrictions in complex forms *)
     | TkBracketOpen, ps ->
-       let kont = kont_complex_form `List ListForm
+       let kont = kont_complex_form ListForm
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
     | TkCurlyOpen, ps ->
-       let kont = kont_complex_form `Map MapForm
+       let kont = kont_complex_form MapForm
        in read_nodes (PickUntil (fun tok -> tok = TkCurlyClose, true), kont) ps
     | TkPoundCurlyOpen, ps ->
-       let kont = kont_complex_form_set
+       let kont = kont_complex_form SetForm
        in read_nodes (PickUntil (fun tok -> tok = TkCurlyClose, true), kont) ps
     (* XXX dimentional check *)
-    | TkPoundBracketOpen None, ps
-    | TkPoundBracketOpen (Some 1), ps ->
-       let kont = kont_complex_form `Vector (VectorForm (Some 1))
+    | TkPoundBracketOpen (None as k), ps
+    | TkPoundBracketOpen (Some 1 as k), ps ->
+       let kont = kont_complex_form (VectorForm k)
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
     | TkPoundBracketOpen (Some k), ps ->
        let kont = kont_complex_form_vector_k (Some k)
@@ -294,8 +294,7 @@ module Make (Lexer : Lexer) = struct
     pdatum_form nodes SimpleForm fxn `Direct |> kont_ok
 
   and kont_complex_form_vector_k k  : pkont = fun nodes ->
-    let (csymb, fstyle) = `Vector, VectorForm k in
-    let head = pdatum_atom (CodifiedSymbolAtom csymb) `Phantom in
+    let fstyle = VectorForm k in
     (match k with
      | Some 0 ->
         if (nodes
@@ -304,21 +303,9 @@ module Make (Lexer : Lexer) = struct
         then kont_ok () else kont_fail (Dimentional_violation 0)
      | None | Some 1 -> kont_ok ()
      | _ -> failwith "multi-dimentional vector not yet supported") >>= fun () ->
-    pdatum_form (PDatumNode head :: nodes) fstyle Infix `Direct |> kont_ok
-  and kont_complex_form csymb fstyle : pkont = fun nodes ->
-    let head = pdatum_atom (CodifiedSymbolAtom csymb) `Phantom in
-    pdatum_form (PDatumNode head :: nodes) fstyle Infix `Direct |> kont_ok
-  and kont_complex_form_set : pkont = fun nodes ->
-    let true_ = pdatum_atom (BoolAtom true) `Phantom in
-    let tr = function
-      | PDatumNode dtm -> PKeywordNode (dtm, true_) |> kont_ok
-      | PKeywordNode _ -> Invalid_element_in_complex_form SetForm |> kont_fail
-      | node -> node |> kont_ok in
-    nodes |&> tr |> seq_result >>= fun nodes ->
-    let csymb = `Set in
-    let head = pdatum_atom (CodifiedSymbolAtom csymb) `Phantom in
-    let head = PDatumNode head in
-    pdatum_form (head :: nodes) SetForm Infix `Direct |> kont_ok
+    pdatum_form nodes fstyle Infix `Direct |> kont_ok
+  and kont_complex_form fstyle : pkont = fun nodes ->
+    pdatum_form nodes fstyle Infix `Direct |> kont_ok
   and kont_simple_form_head ?fxn:(fxn=Infix) ?repr:(repr=`Direct) head : pkont = fun nodes ->
     let nodes = (PDatumNode head) :: nodes
     in pdatum_form nodes SimpleForm fxn repr |> kont_ok

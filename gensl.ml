@@ -209,6 +209,7 @@ end
 
 module Parsetree = struct
   open Basetypes
+  open Sexplib.Std
 
   type parse_error = ..
 
@@ -225,7 +226,7 @@ module Parsetree = struct
     | VectorForm of int option  (** #k[ .. ], k could be omitted *)
     | MapForm                   (**   { .. } *)
     | SetForm                   (**  #{ .. } *)
-    | NotAForm
+  [@@deriving sexp]
 
   (** decor elements, who exists in the wirestring but
       not semantically contributing to the Datatree *)
@@ -326,7 +327,9 @@ module ParsetreePrinter = struct
 
   and     sexp_pdatum = function
     | PAtom patom -> sexp_patom patom
-    | PForm { elem = (nodes, _, _) ; _ } -> List (nodes |> List.map sexp_pnode)
+    | PForm { elem = (nodes, SimpleForm, _) ; _ } -> List (nodes |> List.map sexp_pnode)
+    | PForm { elem = (nodes, fstyle, _) ; _ } ->
+       List (Atom "#cf" :: (sexp_of_form_style fstyle) :: (nodes |> List.map sexp_pnode))
     | PAnnotated { p_annotated; p_anno_front; p_anno_back } ->
        let l = [Atom "annotated"; p_annotated |> sexp_pdatum]
                @ [Atom ":front"] @ (p_anno_front |> List.map sexp_pdatum)

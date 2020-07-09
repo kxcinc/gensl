@@ -106,6 +106,7 @@ let%test "simple examples parses" =
   badparse "#{1 2 :haha yes 3 10}";
   tryparse "{:alice 10 :bob 20}";
   tryparse "#[1 2 3 6 4]";
+  tryparse "#1[1 2 3]";
   tryparse "#0[3]";
   tryparse "#0[@anno 3]";
   badparse "#0[]";
