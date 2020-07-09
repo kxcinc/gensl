@@ -10,7 +10,7 @@ Version 0.1 Checklist
   - [x] positional and keyword nodes
   - [x] annotation nodes and annotated datum
   - [x] mixfix syntax
-  - [ ] shorthand symbol atoms [#1](https://github.com/kxcteam/gensl/issues/1)
+  - [ ] codified symbol atoms [#1](https://github.com/kxcteam/gensl/issues/1)
   - [ ] complex form styles: list, vector, set, map [#2](https://github.com/kxcteam/gensl/issues/2)
 - [ ] complete 4 representations (Parsetree, Datatree, Normaltree, Canonicaltree)
   - [ ] pretty-printers for each representations [#3](https://github.com/kxcteam/gensl/issues/3)
