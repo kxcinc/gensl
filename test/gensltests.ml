@@ -105,4 +105,17 @@ let%test "simple examples parses" =
   tryparse "#{1 2 @haha 3 10}";
   badparse "#{1 2 :haha yes 3 10}";
   tryparse "{:alice 10 :bob 20}";
+  tryparse "#[1 2 3 6 4]";
+  tryparse "#0[3]";
+  tryparse "#0[@anno 3]";
+  badparse "#0[]";
+  badparse "#0[1 2]";
+  (* XXX wait for multi dimention support *)
+  badparse "#2[[1 2] [3 6]]";
+  (* tryparse "#2[[1 2] [3 6]]";
+   * tryparse "#0[3]"; *)
+  (* XXX wait for the dimentional check *)
+  (* badparse "#2[[1 2 5] [3 6]]";
+   * badparse "#2[1 2 6]";
+   * badparse "#0[3 2]"; *)
   true

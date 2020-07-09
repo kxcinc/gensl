@@ -23,6 +23,7 @@ module ParserTypes = struct
     | TkParenOpen
     | TkParenClose
     | TkBracketOpen
+    | TkPoundBracketOpen of int option
     | TkBracketClose
     | TkCurlyOpen
     | TkPoundCurlyOpen
@@ -84,5 +85,6 @@ type parse_error +=
  | Previous_datum_to_annotate_not_exists
  | Lexing_error of lexer_error
  | Invalid_element_in_complex_form of form_style
+ | Dimentional_violation of int
 
 exception Parse_error of parse_error

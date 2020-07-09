@@ -83,8 +83,10 @@ and  token = parse
 | '[' { TkBracketOpen }
 | ']' { TkBracketClose }
 | '{' { TkCurlyOpen }
-| "#{" { TkPoundCurlyOpen }
 | '}' { TkCurlyClose }
+
+| '#' (digit+ as k)? '[' { TkPoundBracketOpen (Option.map int_of_string k) }
+| "#{" { TkPoundCurlyOpen }
 
 | "," (digit+ as k) { TkPickK (false, int_of_string k) }
 | "." (digit+ as k) { TkGrabK (false, int_of_string k) }

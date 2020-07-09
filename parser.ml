@@ -131,6 +131,14 @@ module Make (Lexer : Lexer) = struct
     | (TkPoundCurlyOpen, span), ps ->
        let kont = kont_complex_form_set span Infix
        in read_nodes (PickUntil (fun tok -> tok = TkCurlyClose, true), kont) ps
+    (* XXX dimentional check *)
+    | (TkPoundBracketOpen None, span), ps
+    | (TkPoundBracketOpen (Some 1), span), ps ->
+       let kont = kont_complex_form `Vector VectorForm span Infix
+       in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
+    | (TkPoundBracketOpen (Some k), span), ps ->
+       let kont = kont_complex_form_vector_k k span Infix
+       in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
     | (TkParenClose, span), _ps
     | (TkBracketClose, span), _ps
     | (TkCurlyClose, span), _ps
@@ -300,6 +308,21 @@ module Make (Lexer : Lexer) = struct
 
   and kont_simple_form span mode : pkont = fun nodes ->
     pdatum_form nodes SimpleForm DefaultReader span mode |> kont_ok
+
+  and kont_complex_form_vector_k k span mode : pkont = fun nodes ->
+    let (csymb, style) = `Vector, VectorForm in
+    let head = { elem = CodifiedSymbolAtom csymb; mode = mode; span = span } in
+    let head = PAtom (head, DefaultReader) in
+    let head = PDatumNode head in
+    (match k with
+     | 0 ->
+        if (nodes
+            |> List.find_all (function PDatumNode _ | PKeywordNode _ -> true | _ -> false)
+            |> List.length) = 1
+        then () else raise (Parse_error (Dimentional_violation k))
+     | 1 -> ()
+     | _ -> failwith "multi-dimentional vector not yet supported");
+    pdatum_form (head :: nodes) style DefaultReader span mode |> kont_ok
   and kont_complex_form csymb style span mode : pkont = fun nodes ->
     let head = { elem = CodifiedSymbolAtom csymb; mode = mode; span = span } in
     let head = PAtom (head, DefaultReader) in

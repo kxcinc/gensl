@@ -5,13 +5,14 @@
 Version 0.1 Checklist
 
 - [x] basic parsing algorithm
-- [ ] basic features
+- [x] basic features
   - [x] string, symbol, bytes, boolean, numeric atoms
   - [x] positional and keyword nodes
   - [x] annotation nodes and annotated datum
   - [x] mixfix syntax
   - [x] codified symbol atoms [#1](https://github.com/kxcteam/gensl/issues/1)
-  - [ ] complex form styles: list, vector, set, map [#2](https://github.com/kxcteam/gensl/issues/2)
+  - [x] complex form styles: list, vector, set, map [#2](https://github.com/kxcteam/gensl/issues/2)
+        (partially done: missing multi-dimensional vector support)
 - [ ] complete 4 representations (Parsetree, Datatree, Normaltree, Canonicaltree)
   - [ ] pretty-printers for each representations [#3](https://github.com/kxcteam/gensl/issues/3)
   - [ ] forgetting and embedding functions between representations [#4](https://github.com/kxcteam/gensl/issues/4)
