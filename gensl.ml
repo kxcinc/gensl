@@ -222,7 +222,7 @@ module Parsetree = struct
     | ToplevelForm
     | SimpleForm                (**   ( .. ) *)
     | ListForm                  (**   [ .. ] *)
-    | VectorForm                (** #k[ .. ], k could be omitted *)
+    | VectorForm of int option  (** #k[ .. ], k could be omitted *)
     | MapForm                   (**   { .. } *)
     | SetForm                   (**  #{ .. } *)
     | NotAForm

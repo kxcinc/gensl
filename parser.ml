@@ -121,10 +121,10 @@ module Make (Lexer : Lexer) = struct
     (* XXX dimentional check *)
     | TkPoundBracketOpen None, ps
     | TkPoundBracketOpen (Some 1), ps ->
-       let kont = kont_complex_form `Vector VectorForm
+       let kont = kont_complex_form `Vector (VectorForm (Some 1))
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
     | TkPoundBracketOpen (Some k), ps ->
-       let kont = kont_complex_form_vector_k k
+       let kont = kont_complex_form_vector_k (Some k)
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
     | TkParenClose, _ps
     | TkBracketClose, _ps
@@ -292,15 +292,15 @@ module Make (Lexer : Lexer) = struct
     pdatum_form nodes SimpleForm fxn `Direct |> kont_ok
 
   and kont_complex_form_vector_k k  : pkont = fun nodes ->
-    let (csymb, fstyle) = `Vector, VectorForm in
+    let (csymb, fstyle) = `Vector, VectorForm k in
     let head = pdatum_atom (CodifiedSymbolAtom csymb) `Phantom in
     (match k with
-     | 0 ->
+     | Some 0 ->
         if (nodes
             |> List.find_all (function PDatumNode _ | PKeywordNode _ -> true | _ -> false)
             |> List.length) = 1
-        then kont_ok () else kont_fail (Dimentional_violation k)
-     | 1 -> kont_ok ()
+        then kont_ok () else kont_fail (Dimentional_violation 0)
+     | None | Some 1 -> kont_ok ()
      | _ -> failwith "multi-dimentional vector not yet supported") >>= fun () ->
     pdatum_form (PDatumNode head :: nodes) fstyle Infix `Direct |> kont_ok
   and kont_complex_form csymb fstyle : pkont = fun nodes ->
