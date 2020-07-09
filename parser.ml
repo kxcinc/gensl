@@ -254,7 +254,9 @@ module Make (Lexer : Lexer) = struct
                    loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
                 | TkGrabOne have_head ->
                    go (Some (Postfix (`GrabOne, have_head))) (TkGrabK (have_head,1), ps)
-                | TkGrabPoint -> loop duty ([] :: buckets) ps
+                | TkGrabPoint ->
+                   let decor = PDecorNode { elem = GrabPoint; repr = `Direct } in
+                   loop duty ([] :: (decor :: headbucket) :: restbuckets) ps
                 | TkKeywordIndicator ->
                    read_datum ps >>= fun (kw, ps) ->
                    read_datum ps >>= fun (datum, ps) ->

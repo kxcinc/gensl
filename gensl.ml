@@ -314,11 +314,15 @@ module ParsetreePrinter = struct
     | BoolAtom b -> Atom (sprintf "bool:%b" b)
   let sexp_patom { elem; _ } = sexp_atom elem
 
+  let sexp_decor = function
+    | GrabPoint -> Atom "decor:GrabPoint"
+    | ParseError _ -> Atom "decor:ParseError(_)"
+
   let rec sexp_pnode = function
     | PDatumNode dtm -> sexp_pdatum dtm
     | PAnnoNode dtm -> List [Atom "anno"; sexp_pdatum dtm]
     | PKeywordNode (kw,value) -> List [Atom "kwnode"; sexp_pdatum kw; sexp_pdatum value]
-    | PDecorNode _ -> Atom "some decor"
+    | PDecorNode { elem = d; _ } -> sexp_decor d
 
   and     sexp_pdatum = function
     | PAtom patom -> sexp_patom patom
