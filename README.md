@@ -20,8 +20,9 @@ Version 0.1 Checklist
 - [ ] migration to sedlex (no unicode support) [#6](https://github.com/kxcteam/gensl/issues/6)
 - [ ] perfect unparse (Parsetree --> Wirestring) [#7](https://github.com/kxcteam/gensl/issues/7)
 - [ ] ordering and equality [#8](https://github.com/kxcteam/gensl/issues/8)
-  - [ ] canonical ordering
-  - [ ] structural equality + semantical equivalence
+  - [x] canonical ordering
+  - [ ] structural equality
+  - [x] semantical equivalence
 - [ ] proper testing
   - [ ] proper unit testings
   - [ ] (forget . embed) among representations constitute identity

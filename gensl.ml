@@ -58,14 +58,15 @@ module Basetypes = struct
      `Appsymb05; `Appsymb06; `Appsymb07; `Appsymb08;
      `Appsymb09; `Appsymb10; `Appsymb11; `Appsymb12;
       ] in
-    match find csymb kstd standard with
-    | Some code -> Some code
-    | None -> find csymb kapp application
+    (match find csymb kstd standard with
+     | Some code -> Some code
+     | None -> find csymb kapp application)
+    |> Option.get
 
   let kind_of_csymb csymb =
     match code_of_csymb csymb with
-    | Some code when code >= 0 && code < 20 -> `Standard
-    | Some code when code >= 20 && code < 32 -> `Application
+    | code when code >= 0 && code < 20 -> `Standard
+    | code when code >= 20 && code < 32 -> `Application
     | _ -> raise Not_found
 
   let csymb_of_sexp =
@@ -81,6 +82,36 @@ module Basetypes = struct
   let sexp_of_csymb csymb =
     let open Sexplib.Sexp in
     Atom ("csymb:" ^ (name_of_csymb csymb))
+
+  (** !!this is to serve as the specification of atom ordering *)
+  let compare_atom : atom -> atom -> int = fun a1 a2 ->
+    let catprec = function
+     | CodifiedSymbolAtom _ -> 0
+     | SymbolAtom _ -> 1
+     | BoolAtom _ -> 2
+     | NumericAtom _ -> 3
+     | StringAtom _ -> 4
+     | BytesAtom _ -> 5 in
+    let (>>=) x f = if x <> 0 then x else f() in
+    compare (catprec a1)  (catprec a2) >>= fun () ->
+    match a1, a2 with
+    | CodifiedSymbolAtom c1, CodifiedSymbolAtom c2 ->
+       compare (code_of_csymb c1) (code_of_csymb c2)
+    | SymbolAtom s1, SymbolAtom s2 ->
+       (* XXX use a unicode comparison function *)
+       compare s1 s2
+    | StringAtom s1, StringAtom s2 ->
+       (* XXX use a unicode comparison function *)
+       compare s1 s2
+    | BoolAtom b1, BoolAtom b2 -> compare b1 b2 (* as per ocaml, false < true *)
+    | NumericAtom (num1,suf1), NumericAtom (num2,suf2) ->
+       (* note that we don't interpret the number part *)
+       compare num1 num2 >>= fun () -> compare suf1 suf2
+    | BytesAtom b1, BytesAtom b2 ->
+       let len = Bytes.length in
+       let tr bytes = bytes |> Bytes.to_seq |> List.of_seq in
+       compare (len b1) (len b2) >>= fun () -> compare (tr b1) (tr b2)
+    | _ -> failwith ("panic: "^__LOC__)
 
     (* XXX csymb_of_name, csymb_of_code *)
 end
@@ -99,6 +130,45 @@ module Canonicaltree = struct
         ckwd : (cdatum, cdatum) assoc;
         cpos : cdatum list;
       }
+
+  (** !!this is to serve as the specification of atom ordering *)
+  let rec cdatum_ordering : cdatum -> cdatum -> int = fun x y ->
+    (* CAtom < CForm *)
+    match x, y with
+    | CAtom a1, CAtom a2 -> compare_atom a1 a2
+    | CAtom _, CForm _ -> -1
+    | CForm _, CAtom _ -> 1
+    | CForm { ckwd = (ckwd1,_); cpos = cpos1 },
+      CForm { ckwd = (ckwd2,_); cpos = cpos2 } ->
+       let open struct
+             type node = Kw of cdatum*cdatum | Pos of cdatum
+             let mkkw (k,v) = Kw (k,v) and mkpos x = Pos x
+           end in
+       let compare_kw (k1,_) (k2,_) = cdatum_ordering k1 k2 in
+       let compare_node n1 n2 = match n1, n2 with
+         (* Kw < Pos *)
+         | Kw _, Pos _ -> -1
+         | Pos _, Kw _ -> 1
+         | Kw (k1,v1), Kw (k2,v2) -> compare_kw (k1,v1) (k2,v2)
+         | Pos d1, Pos d2 -> cdatum_ordering d1 d2 in
+       (* XXX maybe we should throw when either ckwd has duplications *)
+       let (ckwd1, ckwd2) =
+         let sort = List.sort_uniq compare_kw
+         in sort ckwd1, sort ckwd2 in
+       let combine kwd pos =
+         let kwd = kwd |&> mkkw and pos = pos |&> mkpos in
+         match pos with
+         | head :: tail -> head :: kwd @ tail
+         | [] -> pos in
+       let compare = function
+         | [], [] -> 0
+         | _, [] -> 1
+         | [], _ -> -1
+         | h1::_, h2::_ -> compare_node h1 h2 in
+       compare (combine ckwd1 cpos1, combine ckwd2 cpos2)
+
+  (** semantical equivalence of two datums *)
+  let eqv_cdatum x y = cdatum_ordering x y = 0
 
   (* XXX sexp_* and pp_* *)
 end

@@ -162,6 +162,8 @@ module Make (Lexer : Lexer) = struct
        in
        read_nodes (PickK 1, kont) ps'
     | (TkEof, span), _ -> Unexpected_eof |> fail span
+
+  (* XXX keyword duplication checks *)
   and     read_nodes : picking_frame -> pstate -> pdatum presult =
     fun pf ps ->
     let (duty, kont) = pf in
