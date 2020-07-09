@@ -93,6 +93,7 @@ and  token = parse
 | "," (digit+ as k) "." { TkPickK (true, int_of_string k) }
 | "." (digit+ as k) "." { TkGrabK (true, int_of_string k) }
 | "," { TkPickOne true }
+| "," space { TkPickOne false }
 | "." { TkGrabOne true }
 | ",," { TkPickAll }
 | ".." { TkGrabAll }

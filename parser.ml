@@ -192,7 +192,7 @@ module Make (Lexer : Lexer) = struct
                    push_datum datum ps
                 | TkPickK (true, k) ->
                    read_datum ps >>= fun (head, ps) ->
-                   let kont = kont_simple_form_head head ~fxn:(Prefix (`PickK k, false) |> fxn) in
+                   let kont = kont_simple_form_head head ~fxn:(Prefix (`PickK k, true) |> fxn) in
                    read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
                    push_datum datum ps
                 | TkPickOne have_head ->

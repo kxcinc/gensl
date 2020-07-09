@@ -218,7 +218,6 @@ module Parsetree = struct
     | Infix
     | Prefix  of [ `PickAll | `PickOne | `PickK of int ]*bool (* with-head-node? *)
     | Postfix of [ `GrabAll | `GrabOne | `GrabK of int ]*bool (* with-head-node? *)
-    | Decorfix
   type form_style =
     | ToplevelForm
     | SimpleForm                (**   ( .. ) *)
@@ -243,22 +242,24 @@ module Parsetree = struct
   and  macro_body =
     | LiteralMacroBody of string
     | StringMacroBody of string
-    | FormMacroBody of (pnode list*form_style) pelem
+    | FormMacroBody of pform
 
   and  pdatum =
     | PAtom of patom
-    | PForm of (pnode list*form_style*form_fixness) pelem
-    | PAnnotated of {
-        p_annotated  : pdatum;
-        p_anno_front : pdatum list;
-        p_anno_back  : pdatum list; (** !!reversed *)
-      }
+    | PForm of pform
+    | PAnnotated of pannotated_record pelem
   and  pnode =
     | PKeywordNode of pdatum * pdatum
     | PDatumNode of pdatum
     | PAnnoNode of pdatum
     | PDecorNode of decor pelem
   and  patom = atom pelem
+  and  pform = (pnode list*form_style*form_fixness) pelem
+  and  pannotated_record = {
+        p_annotated  : pdatum;
+        p_anno_front : pdatum list;
+        p_anno_back  : pdatum list; (** !!reversed *)
+      }
 
   and  'x pelem = {
       elem: 'x;
@@ -273,27 +274,165 @@ module Parsetree = struct
     let elem = (nodes, fstyle, fix) in
     PForm { elem; repr; }
   let pdatum_annofront anno datum : pdatum = match datum with
-    | PAnnotated ({ p_anno_front; _ } as r) ->
-       PAnnotated ({ r with p_anno_front = anno :: p_anno_front })
+    | PAnnotated { elem = { p_anno_front; _ } as r; _} ->
+       PAnnotated ({ elem = { r with p_anno_front = anno :: p_anno_front };
+                     repr = `Direct })
     | _ -> PAnnotated {
-               p_annotated = datum;
-               p_anno_front = [anno];
-               p_anno_back = [];
-             }
+               elem = {
+                 p_annotated = datum;
+                 p_anno_front = [anno];
+                 p_anno_back = [];
+               };
+               repr = `Direct; }
   let pdatum_annoback anno datum : pdatum = match datum with
-    | PAnnotated ({ p_anno_back; _ } as r) ->
-       PAnnotated ({ r with p_anno_back = anno :: p_anno_back })
+    | PAnnotated { elem = { p_anno_back; _ } as r; _} ->
+       PAnnotated ({ elem = { r with p_anno_back = anno :: p_anno_back };
+                     repr = `Direct })
     | _ -> PAnnotated {
-               p_annotated = datum;
-               p_anno_front = [];
-               p_anno_back = [anno];
-             }
-
-(* XXX unparse_datum *)
+               elem = {
+                 p_annotated = datum;
+                 p_anno_front = [];
+                 p_anno_back = [anno];
+               };
+               repr = `Direct; }
 end
 
 module Unparse = struct
-  
+  open Parsetree
+  open Basetypes
+  open Format
+
+  type anypelem = AnyParsetreeElement : _ pelem -> anypelem
+
+  open struct
+    let pstr = pp_print_string
+    let pint = pp_print_int
+    let psp ppf = pp_print_space ppf ()
+    let pcut ppf = pp_print_cut ppf()
+    let any elem = AnyParsetreeElement elem
+    let pmore pp ppf : 'x list -> unit = fun list ->
+      list |> List.iteri @@ fun i x -> if i<>0 then psp ppf; pp ppf x
+  end
+
+  let unparse_atom ppf : atom -> unit = function
+    | SymbolAtom s -> pstr ppf s
+    | CodifiedSymbolAtom csymb ->
+       let prefix = match kind_of_csymb csymb with
+         | `Standard -> "!"
+         | `Application -> "!!" in
+       fprintf ppf "%s%s" prefix (name_of_csymb csymb)
+    | StringAtom str -> fprintf ppf "\"%s\"" (String.escaped str)
+    | BytesAtom b -> fprintf ppf "strbytes:\"%s\"" (b |> Bytes.to_string |> String.escaped)
+    | NumericAtom (num, suffix) -> fprintf ppf "%s%s" num suffix
+    | BoolAtom b -> pstr ppf (if b then "bool:true" else "bool:false")
+
+  let rec unparse_pelem_common ppf : anypelem -> unit = function
+    | AnyParsetreeElement elem -> begin
+        elem |> function
+        |  { repr = `Phantom; _ } -> ()
+        | { repr = `ReaderMacro (ext, LiteralMacroBody str); _ } ->
+           fprintf ppf "%s:%s" ext str
+        | { repr = `ReaderMacro (ext, StringMacroBody str); _ } ->
+           fprintf ppf "%s:\"%s\"" ext (String.escaped str)
+        | { repr = `ReaderMacro (ext, FormMacroBody form); _ } ->
+           fprintf ppf "%s:%a" ext unparse_pform form
+      end
+  [@@ocaml.warning "-8"]
+
+  and unparse_patom ppf : patom -> unit = function
+    | { elem; repr = `Direct } -> unparse_atom ppf elem
+    | elem -> unparse_pelem_common ppf (any elem)
+
+  and unparse_pdatum ppf : pdatum -> unit = function
+    | PAtom atom -> unparse_patom ppf atom
+    | PForm form -> unparse_pform ppf form
+    | PAnnotated { elem = { p_annotated = dtm;
+                            p_anno_front = front;
+                            p_anno_back = back };
+                   repr = `Direct } ->
+       let pannos kind list = pmore (unparse_anno kind) ppf list in
+       pannos `Next front; psp ppf;
+       unparse_pdatum ppf dtm; psp ppf;
+       pannos `Previous back
+    | PAnnotated elem -> unparse_pelem_common ppf (any elem)
+
+  and unparse_anno kind ppf : pdatum -> unit = fun dtm ->
+    let leading_symbol = match kind with
+      | `Standalone -> "@"
+      | `Previous -> "@<"
+      | `Next -> "@>" in
+    pstr ppf leading_symbol; pcut ppf; unparse_pdatum ppf dtm
+
+  and unparse_pform ppf : pform -> unit =
+    function
+    | { repr = (`Phantom | `ReaderMacro _); _ } as elem -> unparse_pelem_common ppf (any elem)
+    | { repr = `Direct;
+        elem = (nodes, style, fxn) } -> begin
+        let headnodes withhead = match withhead, nodes with
+           | true, PDatumNode head :: rest -> Some head, rest
+           | false, _ -> None, nodes
+           | _ -> failwith ("panic: "^__LOC__) in
+        let pohead' prefix = function
+            | Some head -> pstr ppf prefix; unparse_pdatum ppf head
+            | None -> () in
+        let pohead = pohead' "" in
+         match style, fxn with
+         | ToplevelForm, Infix -> pmore unparse_pnode ppf nodes
+         | SimpleForm, Infix ->
+            pstr ppf "("; pcut ppf;
+            pmore unparse_pnode ppf nodes;
+            pcut ppf; pstr ppf ")"
+         | ListForm, Infix ->
+            pstr ppf "["; pcut ppf;
+            pmore unparse_pnode ppf nodes;
+            pcut ppf; pstr ppf "]"
+         | VectorForm k, Infix ->
+            let k = Option.(map string_of_int k |> value ~default:"") in
+            fprintf ppf "#%s[" k; pcut ppf;
+            pmore unparse_pnode ppf nodes;
+            pcut ppf; pstr ppf "]"
+         | MapForm, Infix ->
+            pstr ppf "{"; pcut ppf;
+            pmore unparse_pnode ppf nodes;
+            pcut ppf; pstr ppf "}"
+         | SetForm, Infix ->
+            pstr ppf "#{"; pcut ppf;
+            pmore unparse_pnode ppf nodes;
+            pcut ppf; pstr ppf "}"
+         | (ToplevelForm | ListForm | VectorForm _ | MapForm | SetForm ), _ ->
+            failwith ("panic: "^__LOC__)
+         | SimpleForm, Prefix (`PickAll, wh) ->
+            let (head, nodes) = headnodes wh in
+            pstr ppf ",,"; pohead head; psp ppf;
+            pmore unparse_pnode ppf nodes
+         | SimpleForm, Prefix (`PickOne, wh) ->
+            let (head, nodes) = headnodes wh in
+            pstr ppf ","; pohead head; psp ppf;
+            pmore unparse_pnode ppf nodes
+         | SimpleForm, Prefix (`PickK k, wh) ->
+            let (head, nodes) = headnodes wh in
+            pstr ppf ","; pint ppf k; pohead' "." head; psp ppf;
+            pmore unparse_pnode ppf nodes
+         | SimpleForm, Postfix (`GrabAll, wh) ->
+            let (head, nodes) = headnodes wh in
+            pmore unparse_pnode ppf nodes; psp ppf;
+            pstr ppf ".."; pohead head;
+         | SimpleForm, Postfix (`GrabOne, wh) ->
+            let (head, nodes) = headnodes wh in
+            pmore unparse_pnode ppf nodes; psp ppf;
+            pstr ppf "."; pohead head;
+         | SimpleForm, Postfix (`GrabK k, wh) ->
+            let (head, nodes) = headnodes wh in
+            pmore unparse_pnode ppf nodes; psp ppf;
+            pstr ppf "."; pint ppf k; pohead' "." head;
+      end
+
+  and unparse_pnode ppf : pnode -> unit = function
+    | PKeywordNode (k,v) -> pstr ppf ":"; unparse_pdatum ppf k; psp ppf; unparse_pdatum ppf v
+    | PDatumNode dtm -> unparse_pdatum ppf dtm
+    | PAnnoNode anno -> unparse_anno `Standalone ppf anno
+    | PDecorNode { elem = GrabPoint; _ } -> pstr ppf "."
+    | PDecorNode { elem = (ParseError _); _ } -> pstr ppf "??parse_error"
 end
 
 (* XXX move ParsetreePrinter into Parsetree *)
@@ -330,7 +469,7 @@ module ParsetreePrinter = struct
     | PForm { elem = (nodes, SimpleForm, _) ; _ } -> List (nodes |> List.map sexp_pnode)
     | PForm { elem = (nodes, fstyle, _) ; _ } ->
        List (Atom "#cf" :: (sexp_of_form_style fstyle) :: (nodes |> List.map sexp_pnode))
-    | PAnnotated { p_annotated; p_anno_front; p_anno_back } ->
+    | PAnnotated { elem = { p_annotated; p_anno_front; p_anno_back }; _ } ->
        let l = [Atom "annotated"; p_annotated |> sexp_pdatum]
                @ [Atom ":front"] @ (p_anno_front |> List.map sexp_pdatum)
                @ [Atom ":back"] @ (List.rev p_anno_back |> List.map sexp_pdatum)
