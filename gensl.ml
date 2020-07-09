@@ -6,12 +6,83 @@ module Basetypes = struct
   type ('a, 'b) assoc = ('a*'b) list*('a equality)
   type 'a set = ('a list)*('a equality)
 
+  type csymb =
+    [ | `Toplevel | `Envelop | `Metadata   (* 0..2 *)
+      | `Desc | `Hash | `Uuid | `Version   (* 3..6 *)
+      | `List | `Vector | `Set | `Map      (* 7..10 *)
+      | `Int | `Uint | `Float | `Timestamp (* 11..14 *)
+      (* 15..19: reserved *)
+      | `Appsymb01 | `Appsymb02 | `Appsymb03 | `Appsymb04 (* 20..23 *)
+      | `Appsymb05 | `Appsymb06 | `Appsymb07 | `Appsymb08 (* 24..27 *)
+      | `Appsymb09 | `Appsymb10 | `Appsymb11 | `Appsymb12 (* 28..31 *) ]
   type atom =
      | SymbolAtom of string
+     | CodifiedSymbolAtom of csymb
      | StringAtom of string
      | BytesAtom of bytes
      | NumericAtom of string*string (** [numeric, suffix] *)
      | BoolAtom of bool
+
+  let name_of_csymb = function
+    | `Toplevel -> "toplevel" | `Envelop -> "envelop" | `Metadata -> "metadata"
+    | `Desc -> "desc" | `Hash -> "hash" | `Uuid -> "uuid" | `Version -> "version"
+    | `List -> "list" | `Vector -> "vector" | `Set -> "set" | `Map -> "map"
+    | `Int -> "int" | `Uint -> "uint" | `Float -> "float" | `Timestamp -> "timestamp"
+    | `Appsymb01 -> "app01" | `Appsymb02 -> "app02" | `Appsymb03 -> "app03" | `Appsymb04 -> "app04"
+    | `Appsymb05 -> "app05" | `Appsymb06 -> "app06" | `Appsymb07 -> "app07" | `Appsymb08 -> "app08"
+    | `Appsymb09 -> "app09" | `Appsymb10 -> "app10" | `Appsymb11 -> "app11" | `Appsymb12 -> "app12"
+
+  let csymb_of_name = function
+    | "toplevel" -> `Toplevel | "envelop" -> `Envelop | "metadata" -> `Metadata
+    | "desc" -> `Desc | "hash" -> `Hash | "uuid" -> `Uuid | "version" -> `Version
+    | "list" -> `List | "vector" -> `Vector | "set" -> `Set | "map" -> `Map
+    | "int" -> `Int | "uint" -> `Uint | "float" -> `Float | "timestamp" -> `Timestamp
+    | "app01" -> `Appsymb01 | "app02" -> `Appsymb02 | "app03" -> `Appsymb03 | "app04" -> `Appsymb04
+    | "app05" -> `Appsymb05 | "app06" -> `Appsymb06 | "app07" -> `Appsymb07 | "app08" -> `Appsymb08
+    | "app09" -> `Appsymb09 | "app10" -> `Appsymb10 | "app11" -> `Appsymb11 | "app12" -> `Appsymb12
+    | _ -> raise Not_found
+
+  let code_of_csymb csymb =
+    let rec find x k = function
+      | [] -> None
+      | head :: _ when head = x -> Some k
+      | _ :: rest -> find x (k+1) rest in
+    let (kstd, standard) = 0, [
+        `Toplevel; `Envelop; `Metadata;
+        `Desc; `Hash; `Uuid; `Version;
+        `List; `Vector; `Set; `Map;
+        `Int; `Uint; `Float; `Timestamp;
+      ] in
+    let (kapp, application) = 20, [
+     `Appsymb01; `Appsymb02; `Appsymb03; `Appsymb04;
+     `Appsymb05; `Appsymb06; `Appsymb07; `Appsymb08;
+     `Appsymb09; `Appsymb10; `Appsymb11; `Appsymb12;
+      ] in
+    match find csymb kstd standard with
+    | Some code -> Some code
+    | None -> find csymb kapp application
+
+  let kind_of_csymb csymb =
+    match code_of_csymb csymb with
+    | Some code when code >= 0 && code < 20 -> `Standard
+    | Some code when code >= 20 && code < 32 -> `Application
+    | _ -> raise Not_found
+
+  let csymb_of_sexp =
+    let open Sexplib.Conv_error in
+    let open Sexplib.Sexp in
+    let prefixed pre str = pre = Str.string_before str (String.length pre) in
+    let prefix = "csymb:" in
+    function | Atom str when prefixed prefix str ->
+                let name = Str.string_before str (String.length prefix)
+                in csymb_of_name name
+             | sexp -> unexpected_stag "?csymb" sexp
+
+  let sexp_of_csymb csymb =
+    let open Sexplib.Sexp in
+    Atom ("csymb:" ^ (name_of_csymb csymb))
+
+    (* XXX csymb_of_name, csymb_of_code *)
 end
 
 (* XXX ASCII sanity check/unicode normalization (NFC) on StringAtom *)
@@ -167,6 +238,7 @@ module ParsetreePrinter = struct
 
   let sexp_atom = function
     | SymbolAtom str -> Atom ("symb:" ^ str)
+    | CodifiedSymbolAtom csymb -> Atom ("csymb:" ^ (name_of_csymb csymb))
     | StringAtom str -> Atom ("str:" ^ str)
     | BytesAtom bytes ->
        let encoded = Bytes.to_string bytes

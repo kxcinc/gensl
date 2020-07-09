@@ -38,9 +38,11 @@ let tryparse str =
   | _e -> failwith ("parse error: "^str)
 
 let badparse str =
-  parse str |> function
-  | Ok (datum, _) -> failwith Format.(asprintf "should fail: %s ==> %a" str pp_pdatum datum)
-  | _e -> debug_msg ("failed as expected: "^str)
+  let bingo() = debug_msg ("failed as expected: "^str) in
+  try parse str |> function
+      | Ok (datum, _) -> failwith Format.(asprintf "should fail: %s ==> %a" str pp_pdatum datum)
+      | _e -> bingo()
+  with Failure _ -> bingo()
 
 let%test "simple examples parses" =
   tryparse "1";
@@ -93,4 +95,9 @@ let%test "simple examples parses" =
   tryparse "(1 . 2 . 3 4 5 .. 6 . 7 8 .. ..)";
   tryparse "(1 ,, 1 2 3 ..)";
   tryparse "(1 ,, 1 . 2 3 ..)";
+  tryparse "!envelop";
+  tryparse "(!envelop :!hash \"abcdefg\")";
+  tryparse "!!app03";
+  badparse "!app03";
+  badparse "!!envelop";
   true

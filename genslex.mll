@@ -38,11 +38,28 @@ let hexprefix = "hex:"
 let base64prefix = "b64:" | "base64:"
 let strbytesprefix = "strbytes:"
 
-rule token = parse
+let csymbprefix_std = "!"
+let csymbprefix_app = "!!"
+
+rule csymb_std = parse
+| "toplevel" { `Toplevel } | "envelop" { `Envelop } | "metadata" { `Metadata }
+| "desc" { `Desc } | "hash" { `Hash } | "uuid" { `Uuid } | "version" { `Version }
+| "list" { `List } | "vector" { `Vector } | "set" { `Set } | "map" { `Map }
+| "int" { `Int } | "uint" { `Uint } | "float" { `Float } | "timestamp" { `Timestamp }
+
+and  csymb_app = parse
+| "app01" { `Appsymb01 } | "app02" { `Appsymb02 } | "app03" { `Appsymb03 } | "app04" { `Appsymb04 }
+| "app05" { `Appsymb05 } | "app06" { `Appsymb06 } | "app07" { `Appsymb07 } | "app08" { `Appsymb08 }
+| "app09" { `Appsymb09 } | "app10" { `Appsymb10 } | "app11" { `Appsymb11 } | "app12" { `Appsymb12 }
+
+and  token = parse
 | eof { TkEof }
 | (space+ as lxm) { TkSpaces lxm }
 (* token TkSymbol *)
 | (lowercase alphadigit* as lxm) { TkSymbol lxm }
+(* token TkCodifiedSymbol *)
+| csymbprefix_std { TkCodifiedSymbol (csymb_std lexbuf) }
+| csymbprefix_app { TkCodifiedSymbol (csymb_app lexbuf) }
 (* token TkString *)
 | '"' (instring* as lxm) '"' { TkString (Scanf.unescaped lxm) }
 (* token TkBool *)

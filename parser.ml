@@ -113,6 +113,7 @@ module Make (Lexer : Lexer) = struct
     match lexer_result, ps with
     | (TkSpaces _, _), ps -> read_datum ps
     | (TkSymbol symb, span), ps -> atom_clause (ps,span.span_leading) (SymbolAtom symb)
+    | (TkCodifiedSymbol csymb, span), ps -> atom_clause (ps,span.span_leading) (CodifiedSymbolAtom csymb)
     | (TkString str, span), ps -> atom_clause (ps,span.span_leading) (StringAtom str)
     | (TkBytes bytes, span), ps -> atom_clause (ps,span.span_leading) (BytesAtom bytes)
     | (TkNumeric (num,suffix), span), ps -> atom_clause (ps,span.span_leading) (NumericAtom (num,suffix))

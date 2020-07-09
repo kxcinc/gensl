@@ -1,4 +1,5 @@
 open Gensl
+open Basetypes
 open Utils
 open Parsetree
 
@@ -14,6 +15,7 @@ module ParserTypes = struct
     | TkEof
     | TkSpaces of string
     | TkSymbol of string
+    | TkCodifiedSymbol of csymb
     | TkString of string
     | TkBool of bool
     | TkBytes of bytes
