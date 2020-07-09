@@ -9,7 +9,7 @@ let parse_et_print str =
   P.read_top (Parsing.ParserTypes.pstate lexbuf) |> function
   | Ok (toplevel,_) ->
      printf "%a" ParsetreePrinter.pp_toplevel toplevel
-  | _e -> printf "parse error\n"
+  | Error e -> raise Parsing.(Parse_error (Parse_errors e))
   
 let () =
   let open Format in

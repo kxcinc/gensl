@@ -48,6 +48,11 @@ module Make (Lexer : Lexer) = struct
       else Error [err]
     let kont_ok x = Ok x
     let kont_fail err : 'x kresult = Error [err]
+    let seq_result rs =
+      let rec loop acc = function
+        | [] -> Ok (List.rev acc)
+        | head :: rest -> head >>= fun hd -> loop (hd :: acc) rest
+      in loop [] rs
     (* XXX lift_result might not be a good name *)
     let lift_result ps : 'x kresult -> 'x presult = function
       | Ok x -> Ok (x, ps)
@@ -294,9 +299,9 @@ module Make (Lexer : Lexer) = struct
         if (nodes
             |> List.find_all (function PDatumNode _ | PKeywordNode _ -> true | _ -> false)
             |> List.length) = 1
-        then () else raise (Parse_error (Dimentional_violation k))
-     | 1 -> ()
-     | _ -> failwith "multi-dimentional vector not yet supported");
+        then kont_ok () else kont_fail (Dimentional_violation k)
+     | 1 -> kont_ok ()
+     | _ -> failwith "multi-dimentional vector not yet supported") >>= fun () ->
     pdatum_form (PDatumNode head :: nodes) fstyle Infix `Direct |> kont_ok
   and kont_complex_form csymb fstyle : pkont = fun nodes ->
     let head = pdatum_atom (CodifiedSymbolAtom csymb) `Phantom in
@@ -304,10 +309,10 @@ module Make (Lexer : Lexer) = struct
   and kont_complex_form_set : pkont = fun nodes ->
     let true_ = pdatum_atom (BoolAtom true) `Phantom in
     let tr = function
-      | PDatumNode dtm -> PKeywordNode (dtm, true_)
-      | PKeywordNode _ -> raise (Parse_error (Invalid_element_in_complex_form SetForm))
-      | node -> node in
-    let nodes = nodes |&> tr in
+      | PDatumNode dtm -> PKeywordNode (dtm, true_) |> kont_ok
+      | PKeywordNode _ -> Invalid_element_in_complex_form SetForm |> kont_fail
+      | node -> node |> kont_ok in
+    nodes |&> tr |> seq_result >>= fun nodes ->
     let csymb = `Set in
     let head = pdatum_atom (CodifiedSymbolAtom csymb) `Phantom in
     let head = PDatumNode head in

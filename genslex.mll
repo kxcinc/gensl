@@ -115,10 +115,14 @@ module Lexer : Lexer with
   type nonrec pstate = buffer pstate
   type nonrec lexresult = buffer lexresult
 
+  type lexer_error += No_next_valid_token
+
   let loc buf = buf.lex_curr_p
   (* let source buf = `DirectInput (Some (loc buf).pos_fname) *)
   let lexer buf =
-    let tok = token buf in
-    Ok (tok, pstate buf)
+    try
+      let tok = token buf in
+      Ok (tok, pstate buf)
+    with Failure _ -> Error [Lexing_error No_next_valid_token]
 end
 }

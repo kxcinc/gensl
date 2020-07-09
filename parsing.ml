@@ -149,5 +149,6 @@ type parse_error +=
  | Lexing_error of lexer_error
  | Invalid_element_in_complex_form of form_style
  | Dimentional_violation of int
+ | Parse_errors of trace
 
 exception Parse_error of parse_error
