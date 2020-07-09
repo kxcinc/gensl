@@ -14,15 +14,8 @@ module Make (Lexer : Lexer) = struct
   open Lexer
 
   type nonrec picking_frame = (buffer, location) picking_frame
-  type nonrec pkont = location pkont
 
-  type nonrec pdatum = location pdatum
-  type nonrec pnode = location pnode
-  type nonrec patom = location patom
-  type nonrec 'x pelem = ('x, location) pelem
-
-  type nonrec 'x presult = ('x, buffer, location) presult
-  type nonrec 'x kresult = ('x, location) kresult
+  type nonrec 'x presult = ('x, buffer) presult
 
   let debug_token' msg token_result =
     if !debugging then
@@ -32,10 +25,9 @@ module Make (Lexer : Lexer) = struct
       pp_print_string ppf msg;
       pp_token ppf tok; pp_print_newline ppf (); print_flush())
 
-  let debug_token msg token_result =
+  let debug_token msg tok =
     if !debugging then
     let ppf = Format.std_formatter in
-    let (tok,_) = token_result in
     Format.(
       pp_print_string ppf msg;
       pp_token ppf tok; pp_print_newline ppf (); print_flush())
@@ -52,19 +44,19 @@ module Make (Lexer : Lexer) = struct
   open struct
     let (>>=) = Result.bind
     let ok ps x = Ok (x,ps)
-    let fail span err : 'x presult =
+    let fail err : 'x presult =
       if !debugging
       then raise (Parse_error err)
-      else Error [err, span]
+      else Error [err]
     let kont_ok x = Ok x
-    let kont_fail span err : 'x kresult = Error [err, span]
+    let kont_fail err : 'x kresult = Error [err]
     (* XXX lift_result might not be a good name *)
     let lift_result ps : 'x kresult -> 'x presult = function
       | Ok x -> Ok (x, ps)
       | Error err -> Error err
-    let wrap_lexresult ps : 'loc lexresult -> (token*'loc span) presult = function
+    let wrap_lexresult ps : lexresult -> token presult = function
       | Ok x -> Ok (x, ps)
-      | Error (err, span) -> Error [Lexing_error err, span]
+      | Error err -> Error [Lexing_error err]
     module [@ocaml.warning "-32"] List = struct
       include List
       let split n : 'a list -> 'a list*'a list = fun l ->
@@ -78,7 +70,7 @@ module Make (Lexer : Lexer) = struct
     end
   end
 
-  let lex ({ buf; withdrew } as ps) : (token*Lexer.location span) presult =
+  let lex ({ buf; withdrew } as ps) : token presult =
     match Queue.take withdrew with
     | None -> Lexer.lexer buf |> wrap_lexresult ps
     | Some (tok, withdrew) ->
@@ -98,76 +90,67 @@ module Make (Lexer : Lexer) = struct
   let rec read_datum : pstate -> pdatum presult =
     debug_msg "entering read_datum";
     fun ps ->
-    let span _ps' leading =
-      let span_source = source ps.buf in
-      let span_start = loc ps.buf in
-      let span_end = loc ps.buf in
-      { span_start; span_end; span_source; span_leading = leading }
-    in
-    let atom_clause (ps,leading) atom =
-       let span = span ps leading
-       in pdatum_atom atom span Infix DefaultReader |> ok ps
-    in
     lex ps >>= fun (lexer_result, ps) ->
     (debug_token "read_datum: " lexer_result);
+    let atom_clause ps atom = pdatum_atom atom `Direct |> ok ps in
     match lexer_result, ps with
-    | (TkSpaces _, _), ps -> read_datum ps
-    | (TkSymbol symb, span), ps -> atom_clause (ps,span.span_leading) (SymbolAtom symb)
-    | (TkCodifiedSymbol csymb, span), ps -> atom_clause (ps,span.span_leading) (CodifiedSymbolAtom csymb)
-    | (TkString str, span), ps -> atom_clause (ps,span.span_leading) (StringAtom str)
-    | (TkBytes bytes, span), ps -> atom_clause (ps,span.span_leading) (BytesAtom bytes)
-    | (TkNumeric (num,suffix), span), ps -> atom_clause (ps,span.span_leading) (NumericAtom (num,suffix))
-    | (TkBool b, span), ps -> atom_clause (ps,span.span_leading) (BoolAtom b)
-    | (TkParenOpen, span), ps ->
-       let kont = kont_simple_form span Infix
+    | TkSpaces _, ps -> read_datum ps
+    | TkSymbol symb, ps -> atom_clause ps (SymbolAtom symb)
+    | TkCodifiedSymbol csymb, ps -> atom_clause ps (CodifiedSymbolAtom csymb)
+    | TkString str, ps -> atom_clause ps (StringAtom str)
+    | TkBytes bytes, ps -> atom_clause ps (BytesAtom bytes)
+    | TkNumeric (num,suffix), ps -> atom_clause ps (NumericAtom (num,suffix))
+    | TkBool b, ps -> atom_clause ps (BoolAtom b)
+    | TkParenOpen, ps ->
+       let kont = kont_simple_form()
        in read_nodes (PickUntil (fun tok -> tok = TkParenClose, true), kont) ps
     (* XXX restrictions in complex forms *)
-    | (TkBracketOpen, span), ps ->
-       let kont = kont_complex_form `List ListForm span Infix
+    | TkBracketOpen, ps ->
+       let kont = kont_complex_form `List ListForm
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
-    | (TkCurlyOpen, span), ps ->
-       let kont = kont_complex_form `Map MapForm span Infix
+    | TkCurlyOpen, ps ->
+       let kont = kont_complex_form `Map MapForm
        in read_nodes (PickUntil (fun tok -> tok = TkCurlyClose, true), kont) ps
-    | (TkPoundCurlyOpen, span), ps ->
-       let kont = kont_complex_form_set span Infix
+    | TkPoundCurlyOpen, ps ->
+       let kont = kont_complex_form_set
        in read_nodes (PickUntil (fun tok -> tok = TkCurlyClose, true), kont) ps
     (* XXX dimentional check *)
-    | (TkPoundBracketOpen None, span), ps
-    | (TkPoundBracketOpen (Some 1), span), ps ->
-       let kont = kont_complex_form `Vector VectorForm span Infix
+    | TkPoundBracketOpen None, ps
+    | TkPoundBracketOpen (Some 1), ps ->
+       let kont = kont_complex_form `Vector VectorForm
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
-    | (TkPoundBracketOpen (Some k), span), ps ->
-       let kont = kont_complex_form_vector_k k span Infix
+    | TkPoundBracketOpen (Some k), ps ->
+       let kont = kont_complex_form_vector_k k
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
-    | (TkParenClose, span), _ps
-    | (TkBracketClose, span), _ps
-    | (TkCurlyClose, span), _ps
-    | (TkPickAll, span), _ps | (TkGrabAll, span), _ps
-    | (TkPickK _, span), _ps | (TkGrabK _, span), _ps
-    | (TkPickOne _, span), _ps | (TkGrabOne _, span), _ps
-    | (TkGrabPoint, span), _ps
-    | (TkKeywordIndicator, span), _ps
-    | (TkAnnoPrevIndicator, span), _ps
-    | (TkAnnoStandaloneIndicator, span), _ps
-      -> Unexpected_ending_of_form |> fail span
-    | (TkAnnoNextIndicator, span), ps ->
+    | TkParenClose, _ps
+    | TkBracketClose, _ps
+    | TkCurlyClose, _ps
+    | TkPickAll, _ps | TkGrabAll, _ps
+    | TkPickK _, _ps | TkGrabK _, _ps
+    | TkPickOne _, _ps | TkGrabOne _, _ps
+    | TkGrabPoint, _ps
+    | TkKeywordIndicator, _ps
+    | TkAnnoPrevIndicator, _ps
+    | TkAnnoStandaloneIndicator, _ps
+      -> Unexpected_ending_of_form |> fail 
+    | TkAnnoNextIndicator, ps ->
        read_datum ps >>= fun (anno, ps') ->
        let kont : pkont = function
          | [node] ->
             begin match node with
-            | PDatumNode datum -> pdatum_anno_front anno datum |> kont_ok
-            | _ -> Attempting_to_annotate_non_datum |> kont_fail span
+            | PDatumNode datum -> pdatum_annofront anno datum |> kont_ok
+            | _ -> Attempting_to_annotate_non_datum |> kont_fail 
             end
          | _ -> failwith ("panic: " ^ __LOC__)
        in
        read_nodes (PickK 1, kont) ps'
-    | (TkEof, span), _ -> Unexpected_eof |> fail span
+    | TkEof, _ -> Unexpected_eof |> fail 
 
   (* XXX keyword duplication checks *)
   and     read_nodes : picking_frame -> pstate -> pdatum presult =
     fun pf ps ->
     let (duty, kont) = pf in
-    (* XXX spans might be inaccurate at several places *)
+    (* XXX s might be inaccurate at several places *)
     let rec loop duty buckets ps0 =
       let bucketsize = buckets |> List.map List.length |> List.foldl (+) 0 in
       let headbucket = List.hd buckets in
@@ -183,62 +166,62 @@ module Make (Lexer : Lexer) = struct
       match duty with
       | PickK duty when duty = 0 -> finish_with_kont ps0
       | _ -> begin
-          let rec go (mode : form_fixness option) ((tok, span), ps) =
-            (debug_token' "go lexer_result: " ((tok, span), ps));
-            let mode m = Option.value ~default:m mode in
+          let rec go (fxn : form_fixness option) (tok, ps) =
+            debug_token "go lexer_result: " tok;
+            let fxn m = Option.value ~default:m fxn in
             match tok, duty with
             | TkSpaces _, _ -> loop duty buckets ps0
             | tok, PickUntil delim when fst (delim tok) ->
-               finish_with_kont (if snd (delim tok) then ps else (unlex (tok, span) ps))
+               finish_with_kont (if snd (delim tok) then ps else (unlex tok ps))
             | tok, PickK k when tok_form_ending tok && k > 0 ->
-               Immature_ending_of_form duty |> fail span
+               Immature_ending_of_form duty |> fail 
             | tok, PickUntil _ when tok_form_ending tok ->
-               Immature_ending_of_form duty |> fail span
+               Immature_ending_of_form duty |> fail 
             | _ -> begin
                 match tok with
                 | tok when tok_form_ending tok -> failwith ("panic @"^__LOC__)
                 | TkPickAll ->
-                   let kont = kont_simple_form span (Prefix (`PickAll, false) |> mode) in
+                   let kont = kont_simple_form ~fxn:(Prefix (`PickAll, false) |> fxn) () in
                    read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
                    push_datum datum ps
                 | TkPickK (false, k) ->
-                   let kont = kont_simple_form span (Prefix (`PickK k, false) |> mode) in
+                   let kont = kont_simple_form  ~fxn:(Prefix (`PickK k, false) |> fxn) () in
                    read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
                    push_datum datum ps
                 | TkPickK (true, k) ->
                    read_datum ps >>= fun (head, ps) ->
-                   let kont = kont_simple_form_head head span  (Prefix (`PickK k, false) |> mode) in
+                   let kont = kont_simple_form_head head ~fxn:(Prefix (`PickK k, false) |> fxn) in
                    read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
                    push_datum datum ps
                 | TkPickOne have_head ->
-                   go (Some (Prefix (`PickOne, have_head))) ((TkPickK (have_head,1), span), ps)
+                   go (Some (Prefix (`PickOne, have_head))) ((TkPickK (have_head,1), ps))
                 | TkGrabAll ->
                    (* perform a lex ahead to determing whether there is a head-node *)
                    lex ps >>= begin function
-                   | (TkSpaces _, span), ps ->
+                   | TkSpaces _, ps ->
                       (* no head-node *)
-                      let kont = kont_simple_form span (Postfix (`GrabAll, false) |> mode) in
+                      let kont = kont_simple_form ~fxn:(Postfix (`GrabAll, false) |> fxn) () in
                       kont (List.rev headbucket) >>= fun datum ->
                       loop (dutyadj (List.length headbucket - 1) duty)
                         (match restbuckets with
                          | [] -> [PDatumNode datum] :: []
                          | hd :: tail -> (PDatumNode datum :: hd) :: tail)
                         ps
-                   | (tok, span), ps when tok_form_ending tok ->
+                   | tok, ps when tok_form_ending tok ->
                       (* no head-node *)
-                      let ps = unlex (tok, span) ps in
-                      let kont = kont_simple_form span (Postfix (`GrabAll, false) |> mode) in
+                      let ps = unlex tok ps in
+                      let kont = kont_simple_form ~fxn:(Postfix (`GrabAll, false) |> fxn) () in
                       kont (List.rev headbucket) >>= fun datum ->
                       loop (dutyadj (List.length headbucket - 1) duty)
                         (match restbuckets with
                          | [] -> [PDatumNode datum] :: []
                          | hd :: tail -> (PDatumNode datum :: hd) :: tail)
                         ps
-                   | tokspan, ps ->
+                   | tok, ps ->
                       (* having head-node *)
-                      let ps = unlex tokspan ps in
+                      let ps = unlex tok ps in
                       read_datum ps >>= fun (head, ps) ->
-                      let kont = kont_simple_form_head head span (Postfix (`GrabAll, true) |> mode) in
+                      let kont = kont_simple_form_head ~fxn:(Postfix (`GrabAll, true) |> fxn) head in
                       kont (List.rev headbucket) >>= fun datum ->
                       loop (dutyadj (List.length headbucket - 1) duty)
                         (match restbuckets with
@@ -247,28 +230,28 @@ module Make (Lexer : Lexer) = struct
                         ps
                    end
                 | TkGrabK (false, k) ->
-                   let kont = kont_simple_form span (Postfix (`GrabK k, false) |> mode) in
+                   let kont = kont_simple_form ~fxn:(Postfix (`GrabK k, false) |> fxn) () in
                    (try List.split k headbucket |> kont_ok
                     with Invalid_argument _ ->
                       No_enough_nodes_to_grab {
                           expected = k;
                           available = (List.length headbucket);
-                        } |> kont_fail span) >>= fun (nodes, rbucket) ->
+                        } |> kont_fail ) >>= fun (nodes, rbucket) ->
                    kont (List.rev nodes) >>= fun datum ->
                    loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
                 | TkGrabK (true, k) ->
                    read_datum ps >>= fun (head, ps) ->
-                   let kont = kont_simple_form_head head span (Postfix (`GrabK k, true) |> mode) in
+                   let kont = kont_simple_form_head ~fxn:(Postfix (`GrabK k, true) |> fxn) head in
                    (try List.split k headbucket |> kont_ok
                     with Invalid_argument _ ->
                       No_enough_nodes_to_grab {
                           expected = k;
                           available = (List.length headbucket);
-                        } |> kont_fail span) >>= fun (nodes, rbucket) ->
+                        } |> kont_fail ) >>= fun (nodes, rbucket) ->
                    kont (List.rev nodes) >>= fun datum ->
                    loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
                 | TkGrabOne have_head ->
-                   go (Some (Postfix (`GrabOne, have_head))) ((TkGrabK (have_head,1), span), ps)
+                   go (Some (Postfix (`GrabOne, have_head))) (TkGrabK (have_head,1), ps)
                 | TkGrabPoint -> loop duty ([] :: buckets) ps
                 | TkKeywordIndicator ->
                    read_datum ps >>= fun (kw, ps) ->
@@ -280,17 +263,17 @@ module Make (Lexer : Lexer) = struct
                    (* XXX there might be more corner cases that should be handled.. *)
                    begin match headbucket with
                    | (PDatumNode datum) :: rbucket ->
-                      let annotated = pdatum_anno_back anno datum in
+                      let annotated = pdatum_annoback anno datum in
                       let node = PDatumNode annotated in
                       loop duty ((node :: rbucket) :: restbuckets) ps
-                   | _ -> Previous_datum_to_annotate_not_exists |> fail span
+                   | _ -> Previous_datum_to_annotate_not_exists |> fail 
                    end
                 | TkAnnoStandaloneIndicator ->
                    read_datum ps >>= fun (anno, ps) ->
                    push_node (PAnnoNode anno) ps
                 | _ ->
                    debug_msg (Format.sprintf "%s" __LOC__);
-                   read_datum (unlex (tok, span) ps) >>= fun (datum, ps) ->
+                   read_datum (unlex tok ps) >>= fun (datum, ps) ->
                    push_datum datum ps
               end
           in lex ps0 >>= (go None)
@@ -298,24 +281,17 @@ module Make (Lexer : Lexer) = struct
     in loop duty [[]] ps
 
   and  read_top ps =
-    let span _ps' leading =
-      let span_source = source ps.buf in
-      let span_start = loc ps.buf in
-      let span_end = loc ps.buf in
-      { span_start; span_end; span_source; span_leading = leading } in
     let kont : pkont = function
       | [PDatumNode datum] -> datum |> kont_ok
-      | nodes -> pdatum_form nodes ToplevelForm DefaultReader (span ps NoLeadingInfo) Infix |> kont_ok
+      | nodes -> pdatum_form nodes ToplevelForm Infix `Direct |> kont_ok
     in read_nodes (PickUntil (fun tok -> tok_eof tok, true), kont) ps
 
-  and kont_simple_form span mode : pkont = fun nodes ->
-    pdatum_form nodes SimpleForm DefaultReader span mode |> kont_ok
+  and kont_simple_form ?fxn:(fxn=Infix) () : pkont = fun nodes ->
+    pdatum_form nodes SimpleForm fxn `Direct |> kont_ok
 
-  and kont_complex_form_vector_k k span mode : pkont = fun nodes ->
-    let (csymb, style) = `Vector, VectorForm in
-    let head = { elem = CodifiedSymbolAtom csymb; mode = mode; span = span } in
-    let head = PAtom (head, DefaultReader) in
-    let head = PDatumNode head in
+  and kont_complex_form_vector_k k  : pkont = fun nodes ->
+    let (csymb, fstyle) = `Vector, VectorForm in
+    let head = pdatum_atom (CodifiedSymbolAtom csymb) `Phantom in
     (match k with
      | 0 ->
         if (nodes
@@ -324,27 +300,24 @@ module Make (Lexer : Lexer) = struct
         then () else raise (Parse_error (Dimentional_violation k))
      | 1 -> ()
      | _ -> failwith "multi-dimentional vector not yet supported");
-    pdatum_form (head :: nodes) style DefaultReader span mode |> kont_ok
-  and kont_complex_form csymb style span mode : pkont = fun nodes ->
-    let head = { elem = CodifiedSymbolAtom csymb; mode = mode; span = span } in
-    let head = PAtom (head, DefaultReader) in
-    let head = PDatumNode head in
-    pdatum_form (head :: nodes) style DefaultReader span mode |> kont_ok
-  and kont_complex_form_set span mode : pkont = fun nodes ->
-    let true_ = pdatum_atom (BoolAtom true) span Phantomfix DefaultReader in
+    pdatum_form (PDatumNode head :: nodes) fstyle Infix `Direct |> kont_ok
+  and kont_complex_form csymb fstyle : pkont = fun nodes ->
+    let head = pdatum_atom (CodifiedSymbolAtom csymb) `Phantom in
+    pdatum_form (PDatumNode head :: nodes) fstyle Infix `Direct |> kont_ok
+  and kont_complex_form_set : pkont = fun nodes ->
+    let true_ = pdatum_atom (BoolAtom true) `Phantom in
     let tr = function
       | PDatumNode dtm -> PKeywordNode (dtm, true_)
       | PKeywordNode _ -> raise (Parse_error (Invalid_element_in_complex_form SetForm))
       | node -> node in
     let nodes = nodes |&> tr in
     let csymb = `Set in
-    let head = { elem = CodifiedSymbolAtom csymb; mode = mode; span = span } in
-    let head = PAtom (head, DefaultReader) in
+    let head = pdatum_atom (CodifiedSymbolAtom csymb) `Phantom in
     let head = PDatumNode head in
-    pdatum_form (head :: nodes) SetForm DefaultReader span mode |> kont_ok
-  and kont_simple_form_head head span mode : pkont = fun nodes ->
+    pdatum_form (head :: nodes) SetForm Infix `Direct |> kont_ok
+  and kont_simple_form_head ?fxn:(fxn=Infix) ?repr:(repr=`Direct) head : pkont = fun nodes ->
     let nodes = (PDatumNode head) :: nodes
-    in pdatum_form nodes SimpleForm DefaultReader span mode |> kont_ok
+    in pdatum_form nodes SimpleForm fxn repr |> kont_ok
 end
 
 module Default = Make(Genslex.Lexer)
