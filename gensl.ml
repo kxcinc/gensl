@@ -228,13 +228,15 @@ module Parsetree = struct
 
   type parse_error = ..
 
-  type syntax_mode =
+  (* syntax_mode and form_style should only concern forms *)
+  type form_fixness =
     | Infix
-    | Prefix  of [ `PickAll | `PickOne | `PickK of int ]
-    | Postfix of [ `GrabAll | `GrabOne | `GrabK of int ]
+    | Prefix  of [ `PickAll | `PickOne | `PickK of int ]*bool (* with-head-node? *)
+    | Postfix of [ `GrabAll | `GrabOne | `GrabK of int ]*bool (* with-head-node? *)
     | Phantomfix
   type form_style =
     | ToplevelForm
+    | PhantomForm
     | SimpleForm                (**   ( .. ) *)
     | ListForm                  (**   [ .. ] *)
     | VectorForm                (** #k[ .. ], k could be omitted *)
@@ -247,8 +249,6 @@ module Parsetree = struct
       they don't semantically contribute to the Datatree *)
   type phantom = 
     | GrabPoint        (** .  - the postfix grab-point *)
-    | GrabAllOperator  (** .. - the postfix grab-all operator *)
-    | PickAllOperator  (** ,, - the prefix pick-all operator *)
     | ParseError of parse_error
 
   type reader_style =
@@ -272,7 +272,7 @@ module Parsetree = struct
 
   and  ('x, 'l) pelem = {
       elem: 'x;
-      mode: syntax_mode;
+      mode: form_fixness;
       span: 'l span
     }
 
@@ -300,6 +300,10 @@ module Parsetree = struct
              }
 
 (* XXX unparse_datum *)
+end
+
+module Unparse = struct
+  
 end
 
 (* XXX move ParsetreePrinter into Parsetree *)

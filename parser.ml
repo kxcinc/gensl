@@ -183,7 +183,7 @@ module Make (Lexer : Lexer) = struct
       match duty with
       | PickK duty when duty = 0 -> finish_with_kont ps0
       | _ -> begin
-          let rec go mode ((tok, span), ps) =
+          let rec go (mode : form_fixness option) ((tok, span), ps) =
             (debug_token' "go lexer_result: " ((tok, span), ps));
             let mode m = Option.value ~default:m mode in
             match tok, duty with
@@ -198,26 +198,26 @@ module Make (Lexer : Lexer) = struct
                 match tok with
                 | tok when tok_form_ending tok -> failwith ("panic @"^__LOC__)
                 | TkPickAll ->
-                   let kont = kont_simple_form span (Prefix `PickAll |> mode) in
+                   let kont = kont_simple_form span (Prefix (`PickAll, false) |> mode) in
                    read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
                    push_datum datum ps
                 | TkPickK (false, k) ->
-                   let kont = kont_simple_form span (Prefix (`PickK k) |> mode) in
+                   let kont = kont_simple_form span (Prefix (`PickK k, false) |> mode) in
                    read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
                    push_datum datum ps
                 | TkPickK (true, k) ->
                    read_datum ps >>= fun (head, ps) ->
-                   let kont = kont_simple_form_head head span  (Prefix (`PickK k) |> mode) in
+                   let kont = kont_simple_form_head head span  (Prefix (`PickK k, false) |> mode) in
                    read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
                    push_datum datum ps
                 | TkPickOne have_head ->
-                   go (Some (Prefix `PickOne)) ((TkPickK (have_head,1), span), ps)
+                   go (Some (Prefix (`PickOne, have_head))) ((TkPickK (have_head,1), span), ps)
                 | TkGrabAll ->
                    (* perform a lex ahead to determing whether there is a head-node *)
                    lex ps >>= begin function
                    | (TkSpaces _, span), ps ->
                       (* no head-node *)
-                      let kont = kont_simple_form span (Postfix `GrabAll |> mode) in
+                      let kont = kont_simple_form span (Postfix (`GrabAll, false) |> mode) in
                       kont (List.rev headbucket) >>= fun datum ->
                       loop (dutyadj (List.length headbucket - 1) duty)
                         (match restbuckets with
@@ -227,7 +227,7 @@ module Make (Lexer : Lexer) = struct
                    | (tok, span), ps when tok_form_ending tok ->
                       (* no head-node *)
                       let ps = unlex (tok, span) ps in
-                      let kont = kont_simple_form span (Postfix `GrabAll |> mode) in
+                      let kont = kont_simple_form span (Postfix (`GrabAll, false) |> mode) in
                       kont (List.rev headbucket) >>= fun datum ->
                       loop (dutyadj (List.length headbucket - 1) duty)
                         (match restbuckets with
@@ -238,7 +238,7 @@ module Make (Lexer : Lexer) = struct
                       (* having head-node *)
                       let ps = unlex tokspan ps in
                       read_datum ps >>= fun (head, ps) ->
-                      let kont = kont_simple_form_head head span (Postfix `GrabAll |> mode) in
+                      let kont = kont_simple_form_head head span (Postfix (`GrabAll, true) |> mode) in
                       kont (List.rev headbucket) >>= fun datum ->
                       loop (dutyadj (List.length headbucket - 1) duty)
                         (match restbuckets with
@@ -247,7 +247,7 @@ module Make (Lexer : Lexer) = struct
                         ps
                    end
                 | TkGrabK (false, k) ->
-                   let kont = kont_simple_form span (Postfix (`GrabK k) |> mode) in
+                   let kont = kont_simple_form span (Postfix (`GrabK k, false) |> mode) in
                    (try List.split k headbucket |> kont_ok
                     with Invalid_argument _ ->
                       No_enough_nodes_to_grab {
@@ -258,7 +258,7 @@ module Make (Lexer : Lexer) = struct
                    loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
                 | TkGrabK (true, k) ->
                    read_datum ps >>= fun (head, ps) ->
-                   let kont = kont_simple_form_head head span (Postfix (`GrabK k) |> mode) in
+                   let kont = kont_simple_form_head head span (Postfix (`GrabK k, true) |> mode) in
                    (try List.split k headbucket |> kont_ok
                     with Invalid_argument _ ->
                       No_enough_nodes_to_grab {
@@ -268,7 +268,7 @@ module Make (Lexer : Lexer) = struct
                    kont (List.rev nodes) >>= fun datum ->
                    loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
                 | TkGrabOne have_head ->
-                   go (Some (Postfix `GrabOne)) ((TkGrabK (have_head,1), span), ps)
+                   go (Some (Postfix (`GrabOne, have_head))) ((TkGrabK (have_head,1), span), ps)
                 | TkGrabPoint -> loop duty ([] :: buckets) ps
                 | TkKeywordIndicator ->
                    read_datum ps >>= fun (kw, ps) ->
