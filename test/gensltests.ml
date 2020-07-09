@@ -119,4 +119,5 @@ let%test "simple examples parses" =
   (* badparse "#2[[1 2 5] [3 6]]";
    * badparse "#2[1 2 6]";
    * badparse "#0[3 2]"; *)
+  tryparse "{foo => 10, bar => 20}";
   true

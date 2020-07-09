@@ -31,6 +31,8 @@ module ParserTypes = struct
     | TkCurlyOpen
     | TkPoundCurlyOpen
     | TkCurlyClose
+    | TkComma (* for the decor-only comma *)
+    | TkMapsto (* for the decor-only mapsto, i.e. '->' *)
     | TkPickAll | TkGrabAll
     | TkPickK of bool*int | TkGrabK of bool*int
     | TkPickOne of bool | TkGrabOne of bool
@@ -142,10 +144,11 @@ end
 type parse_error +=
  | Unexpected_eof
  | Unexpected_ending_of_form
+ | Unexpected_position_of_comma
  | Immature_ending_of_form of pickduty
  | No_enough_nodes_to_grab of { expected : int; available : int; }
  | Attempting_to_annotate_non_datum
- | Previous_datum_to_annotate_not_exists
+ | Previous_datum_not_exists
  | Lexing_error of lexer_error
  | Invalid_element_in_complex_form of form_style
  | Dimentional_violation of int

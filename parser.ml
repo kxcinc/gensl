@@ -129,6 +129,7 @@ module Make (Lexer : Lexer) = struct
     | TkParenClose, _ps
     | TkBracketClose, _ps
     | TkCurlyClose, _ps
+    | TkComma, _ps | TkMapsto, _ps
     | TkPickAll, _ps | TkGrabAll, _ps
     | TkPickK _, _ps | TkGrabK _, _ps
     | TkPickOne _, _ps | TkGrabOne _, _ps
@@ -165,6 +166,34 @@ module Make (Lexer : Lexer) = struct
       let push_node node ps = loop (dutydec duty) ((node :: headbucket) :: restbuckets) ps in
       let push_datum datum ps = push_node (PDatumNode datum) ps in
       let finish_with_kont ps = kont (List.concat buckets |> List.rev) |> lift_result ps in
+      let nodatanode() =
+        let rec loop = function
+          | PAnnoNode _ :: rest -> loop rest
+          | PDecorNode _ :: rest -> loop rest
+          | [] -> true
+          | _ -> false
+        in List.concat buckets |> loop in
+      (* XXX there might be more corner cases that should be handled.. *)
+      let with_prev_datum_node kont =
+        let rec loopy = function
+          | (PDatumNode datum) :: rbucket ->
+             kont datum >>= fun (node, ps) ->
+             loop duty ((node :: rbucket) :: restbuckets) ps
+          | (PAnnoNode _) :: rbucket -> loopy rbucket
+          | _ -> Previous_datum_not_exists |> fail
+        in loopy headbucket
+      in
+      let collect k =
+        let rec loop acc = function
+          | 0, rest -> (List.rev acc, rest) |> kont_ok
+          | k, PDecorNode _ :: rest -> loop acc (k, rest)
+          | k, (PAnnoNode _ as node) :: rest -> loop (node :: acc) (k, rest)
+          | k, node :: rest -> loop (node :: acc) (k-1, rest)
+          | _, [] -> No_enough_nodes_to_grab {
+                          expected = k;
+                          available = -1; (* XXX dummy value *)
+                        } |> kont_fail
+        in loop [] (k, headbucket) in
       match duty with
       | PickK duty when duty = 0 -> finish_with_kont ps
       | _ -> begin
@@ -182,6 +211,10 @@ module Make (Lexer : Lexer) = struct
             | _ -> begin
                 match tok with
                 | tok when tok_form_ending tok -> failwith ("panic @"^__LOC__)
+                | TkComma -> 
+                   if nodatanode() then Unexpected_position_of_comma |> fail
+                   else let node = pnode_decor CommaSeparator
+                        in loop duty ((node :: headbucket) :: restbuckets) ps
                 | TkPickAll ->
                    let kont = kont_simple_form ~fxn:(Prefix (`PickAll, false) |> fxn) () in
                    read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
@@ -233,23 +266,13 @@ module Make (Lexer : Lexer) = struct
                    end
                 | TkGrabK (false, k) ->
                    let kont = kont_simple_form ~fxn:(Postfix (`GrabK k, false) |> fxn) () in
-                   (try List.split k headbucket |> kont_ok
-                    with Invalid_argument _ ->
-                      No_enough_nodes_to_grab {
-                          expected = k;
-                          available = (List.length headbucket);
-                        } |> kont_fail ) >>= fun (nodes, rbucket) ->
+                   collect k >>= fun (nodes, rbucket) ->
                    kont (List.rev nodes) >>= fun datum ->
                    loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
                 | TkGrabK (true, k) ->
                    read_datum ps >>= fun (head, ps) ->
                    let kont = kont_simple_form_head ~fxn:(Postfix (`GrabK k, true) |> fxn) head in
-                   (try List.split k headbucket |> kont_ok
-                    with Invalid_argument _ ->
-                      No_enough_nodes_to_grab {
-                          expected = k;
-                          available = (List.length headbucket);
-                        } |> kont_fail ) >>= fun (nodes, rbucket) ->
+                   collect k >>= fun (nodes, rbucket) ->
                    kont (List.rev nodes) >>= fun datum ->
                    loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
                 | TkGrabOne have_head ->
@@ -262,16 +285,15 @@ module Make (Lexer : Lexer) = struct
                    read_datum ps >>= fun (datum, ps) ->
                    let node = PKeywordNode (kw, datum)
                    in push_node node ps
+                | TkMapsto ->
+                   read_datum ps >>= fun (datum, ps) ->
+                   with_prev_datum_node @@ fun kw ->
+                      PKeywordNode (kw, datum) |> ok ps
                 | TkAnnoPrevIndicator ->
                    read_datum ps >>= fun (anno, ps) ->
-                   (* XXX there might be more corner cases that should be handled.. *)
-                   begin match headbucket with
-                   | (PDatumNode datum) :: rbucket ->
-                      let annotated = pdatum_annoback anno datum in
-                      let node = PDatumNode annotated in
-                      loop duty ((node :: rbucket) :: restbuckets) ps
-                   | _ -> Previous_datum_to_annotate_not_exists |> fail 
-                   end
+                   with_prev_datum_node @@ fun datum ->
+                      let annotated = pdatum_annoback anno datum
+                      in PDatumNode annotated |> ok ps
                 | TkAnnoStandaloneIndicator ->
                    read_datum ps >>= fun (anno, ps) ->
                    push_node (PAnnoNode anno) ps
