@@ -39,8 +39,6 @@ module Make (Lexer : Lexer) = struct
       pp_print_string ppf msg;
       pp_print_newline ppf (); print_flush())
 
-  let pstate : buffer -> pstate = fun buf -> { buf; withdrew = Queue.empty }
-
   open struct
     let (>>=) = Result.bind
     let ok ps x = Ok (x,ps)
@@ -54,9 +52,7 @@ module Make (Lexer : Lexer) = struct
     let lift_result ps : 'x kresult -> 'x presult = function
       | Ok x -> Ok (x, ps)
       | Error err -> Error err
-    let wrap_lexresult ps : lexresult -> token presult = function
-      | Ok x -> Ok (x, ps)
-      | Error err -> Error [Lexing_error err]
+    let wrap_lexresult : lexresult -> token presult = fun x -> x
     module [@ocaml.warning "-32"] List = struct
       include List
       let split n : 'a list -> 'a list*'a list = fun l ->
@@ -72,7 +68,7 @@ module Make (Lexer : Lexer) = struct
 
   let lex ({ buf; withdrew } as ps) : token presult =
     match Queue.take withdrew with
-    | None -> Lexer.lexer buf |> wrap_lexresult ps
+    | None -> Lexer.lexer buf |> wrap_lexresult
     | Some (tok, withdrew) ->
        ok { ps with withdrew } tok
 
@@ -87,13 +83,16 @@ module Make (Lexer : Lexer) = struct
     | TkEof -> true
     | _ -> false
 
+  (* NB that pstate should be used as a linear type and it needs manual unlexing *)
+  (* psst: we probably want to assert linearity on pstate *)
+
   let rec read_datum : pstate -> pdatum presult =
-    debug_msg "entering read_datum";
     fun ps ->
-    lex ps >>= fun (lexer_result, ps) ->
-    (debug_token "read_datum: " lexer_result);
+    debug_msg "entering read_datum";
+    lex ps >>= fun (tok, ps) ->
+    (debug_token "read_datum: " tok);
     let atom_clause ps atom = pdatum_atom atom `Direct |> ok ps in
-    match lexer_result, ps with
+    match tok, ps with
     | TkSpaces _, ps -> read_datum ps
     | TkSymbol symb, ps -> atom_clause ps (SymbolAtom symb)
     | TkCodifiedSymbol csymb, ps -> atom_clause ps (CodifiedSymbolAtom csymb)
@@ -134,7 +133,7 @@ module Make (Lexer : Lexer) = struct
     | TkAnnoStandaloneIndicator, _ps
       -> Unexpected_ending_of_form |> fail 
     | TkAnnoNextIndicator, ps ->
-       read_datum ps >>= fun (anno, ps') ->
+       read_datum ps >>= fun (anno, ps) ->
        let kont : pkont = function
          | [node] ->
             begin match node with
@@ -143,15 +142,13 @@ module Make (Lexer : Lexer) = struct
             end
          | _ -> failwith ("panic: " ^ __LOC__)
        in
-       read_nodes (PickK 1, kont) ps'
+       read_nodes (PickK 1, kont) ps
     | TkEof, _ -> Unexpected_eof |> fail 
 
   (* XXX keyword duplication checks *)
   and     read_nodes : picking_frame -> pstate -> pdatum presult =
-    fun pf ps ->
-    let (duty, kont) = pf in
-    (* XXX s might be inaccurate at several places *)
-    let rec loop duty buckets ps0 =
+    fun (duty, kont) ps ->
+    let rec loop duty buckets ps =
       let bucketsize = buckets |> List.map List.length |> List.foldl (+) 0 in
       let headbucket = List.hd buckets in
       let restbuckets = List.tl buckets in
@@ -164,13 +161,13 @@ module Make (Lexer : Lexer) = struct
       let push_datum datum ps = push_node (PDatumNode datum) ps in
       let finish_with_kont ps = kont (List.concat buckets |> List.rev) |> lift_result ps in
       match duty with
-      | PickK duty when duty = 0 -> finish_with_kont ps0
+      | PickK duty when duty = 0 -> finish_with_kont ps
       | _ -> begin
           let rec go (fxn : form_fixness option) (tok, ps) =
-            debug_token "go lexer_result: " tok;
-            let fxn m = Option.value ~default:m fxn in
+            debug_token "read_nodes.go " tok;
+            let fxn f = Option.value ~default:f fxn in
             match tok, duty with
-            | TkSpaces _, _ -> loop duty buckets ps0
+            | TkSpaces _, _ -> loop duty buckets ps
             | tok, PickUntil delim when fst (delim tok) ->
                finish_with_kont (if snd (delim tok) then ps else (unlex tok ps))
             | tok, PickK k when tok_form_ending tok && k > 0 ->
@@ -276,7 +273,7 @@ module Make (Lexer : Lexer) = struct
                    read_datum (unlex tok ps) >>= fun (datum, ps) ->
                    push_datum datum ps
               end
-          in lex ps0 >>= (go None)
+          in lex ps >>= (go None)
         end
     in loop duty [[]] ps
 

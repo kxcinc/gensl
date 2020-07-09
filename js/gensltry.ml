@@ -24,7 +24,7 @@ let tryparse str =
   let open Format in
   let module P = Parser.Default in
   let lexbuf = from_string str in
-  P.read_datum (Parser.Default.pstate lexbuf) |> function
+  P.read_datum (pstate lexbuf) |> function
   | Ok (datum,_) ->
      printf "%a\n" ParsetreePrinter.pp_pdatum datum
   | _e -> printf "parse error\n"

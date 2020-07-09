@@ -97,7 +97,6 @@ module ParserTypes = struct
 
   (* XXX span tracking *)
 
-  type lexresult = (token, lexer_error) result
   type trace = parse_error list
   type 'x kresult = ('x, trace) result
   type pkont = pnode list -> pdatum kresult
@@ -109,12 +108,16 @@ module ParserTypes = struct
     | PickUntil of (token -> bool*bool) (** [token] -> [stop?, consume?] *)
 
   type 'loc frame_state = { pickduty : int; bucket : pdatum }
+
+  (** shall be treated as a linear type *)
   type 'buf pstate = {
-      buf : 'buf;
+      buf : 'buf; (** will be used as a linear type *)
       withdrew : token queue;
     }
   type ('x, 'buf) presult = ('x*'buf pstate, trace) result
+  type 'buf lexresult = (token, 'buf) presult
 
+  let pstate buf = { buf; withdrew = Queue.empty }
   let pp_pickduty ppf = Format.(function
     | PickK k -> fprintf ppf "Pick(%d)" k
     | PickUntil f ->
@@ -127,12 +130,13 @@ module type Lexer = sig
   type buffer
   type location
   type nonrec pstate = buffer pstate
+  type nonrec lexresult = buffer lexresult
 
   (* val source : buffer -> span_source *)
 
   val loc : buffer -> location
   val lexer : buffer -> lexresult
-  (** [lexer buf pos] consume and returns next token from position [pos] *)
+  (** [lexer buf pos] consumes and returns next token in buffer *)
 end
 
 type parse_error +=

@@ -30,7 +30,7 @@ let parse str =
   let open Lexing in
   let module P = Parser.Default in
   let lexbuf = from_string str in
-  P.read_datum (Parser.Default.pstate lexbuf)
+  P.read_datum (pstate lexbuf)
 
 let tryparse str =
   parse str |> function

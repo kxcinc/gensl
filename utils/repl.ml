@@ -6,7 +6,7 @@ let parse_et_print str =
   let open Format in
   let module P = Parser.Default in
   let lexbuf = from_string str in
-  P.read_top (Parser.Default.pstate lexbuf) |> function
+  P.read_top (Parsing.ParserTypes.pstate lexbuf) |> function
   | Ok (toplevel,_) ->
      printf "%a" ParsetreePrinter.pp_toplevel toplevel
   | _e -> printf "parse error\n"

@@ -113,17 +113,12 @@ module Lexer : Lexer with
   type buffer = Lexing.lexbuf
   type location = Lexing.position
   type nonrec pstate = buffer pstate
+  type nonrec lexresult = buffer lexresult
 
   let loc buf = buf.lex_curr_p
   (* let source buf = `DirectInput (Some (loc buf).pos_fname) *)
   let lexer buf =
     let tok = token buf in
-    (* let span = {
-     *     span_start = buf.lex_start_p;
-     *     span_end = buf.lex_curr_p;
-     *     span_leading = NoLeadingInfo;
-     *     span_source = source buf;
-     *   } in *)
-    Ok tok
+    Ok (tok, pstate buf)
 end
 }
