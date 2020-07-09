@@ -6,6 +6,16 @@ module Basetypes = struct
   type ('a, 'b) assoc = ('a*'b) list*('a equality)
   type 'a set = ('a list)*('a equality)
 
+  let rec map_assoc : ('a1 -> 'b1) -> ('a2 -> 'b2) -> 'b1 equality -> ('a1, 'a2) assoc -> ('b1, 'b2) assoc =
+    fun f g b_eq (al, _a_eq) ->
+    let fg : ('a1 * 'a2) -> ('b1 * 'b2) = fun (x, y) -> (f x, g y) in
+    (List.map fg al, b_eq)
+
+  let rec pair : ('a1 -> 'b1) -> ('a2 -> 'b2) -> ('a1 * 'a2) -> ('b1 * 'b2) =
+    fun f g (x, y) -> (f x, g y)
+
+  let pair2 : ('a -> 'b) -> ('a * 'a) -> ('b * 'b) = fun f -> pair f f
+  
   type atom =
      | SymbolAtom of string
      | StringAtom of string
@@ -38,21 +48,51 @@ module Normaltree = struct
   type ndatum =
     | NAtom of atom
     | NForm of {
+        (* 潰された *)
         n_keywordeds  : (ndatum, ndatum) assoc;
         n_positionals : ndatum list;
         n_annotations : ndatum set;
       }
     | NAnnotated of ndatum * ndatum set
 
+  open Canonicaltree
   (* XXX sexp_* and pp_* *)
+  let rec
+    cdatum_of_ndatum : ndatum -> cdatum =
+    fun nt ->
+    match nt with
+    | NAtom a -> CAtom a
+    | NForm {n_keywordeds = nkws; n_positionals = nposes; n_annotations = _ann} ->
+      CForm {ckwd = map_assoc cdatum_of_ndatum cdatum_of_ndatum (=) nkws ;
+             cpos = List.map cdatum_of_ndatum nposes}
+    | NAnnotated (ndat, _annos) -> cdatum_of_ndatum ndat
+        
+  and eq_ndatum : ndatum equality = fun a b -> (cdatum_of_ndatum a) = (cdatum_of_ndatum b)
+  let natom atom = NAtom atom
+  let nform : (ndatum*ndatum) list -> ndatum list -> ndatum list -> ndatum =
+    fun keywordeds positionals annotations ->
+    NForm { n_keywordeds = (keywordeds, eq_ndatum);
+            n_positionals = positionals;
+            n_annotations = (annotations, eq_ndatum) }
+  let nannotated : ndatum -> ndatum list -> ndatum =
+    fun annotated annotations ->
+    NAnnotated (annotated, (annotations, eq_ndatum))
+
+  let rec ndatum_of_cdatum : cdatum -> ndatum = function
+    | CAtom a -> NAtom a
+    | CForm {ckwd = ckws; cpos = cposes} ->
+      NForm {n_keywordeds = map_assoc ndatum_of_cdatum ndatum_of_cdatum eq_ndatum ckws ;
+             n_positionals = List.map ndatum_of_cdatum cposes ;
+             n_annotations = ([], eq_ndatum) }
 end
 
 module Datatree = struct
   open Basetypes
 
+  (* "AST" of the data term *)
   type ddatum =
-    | DAtom of atom
-    | DForm of dnode list
+    | DAtom of atom (* an atom *)
+    | DForm of dnode list (* a form is represented as a list of nodes *)
     | DAnnotated of {
         d_annotated : ddatum;
         d_anno_front : ddatum list;
@@ -64,6 +104,61 @@ module Datatree = struct
     | DAnnoNode of ddatum
 
   (* XXX sexp_* and pp_* *)
+  open Normaltree
+  let rec ndatum_of_ddatum : ddatum -> ndatum = function
+    | DAtom a -> NAtom a
+    | DForm dnodes ->
+      let f (acckw, accpos, accann) node =
+        begin match node with
+          | DKeywordNode (x, y) ->
+            (pair2 ndatum_of_ddatum (x, y) :: acckw, accpos, accann)
+          | DDatumNode datn ->
+            (acckw, (ndatum_of_ddatum datn) :: accpos, accann)
+          | DAnnoNode annn ->
+            (acckw, accpos, (ndatum_of_ddatum annn) :: accann)
+        end
+      in
+      let (kws, posses, anns) = List.fold_left f ([], [], []) dnodes in
+      NForm {n_keywordeds = (kws, eq_ndatum);
+             n_positionals = posses;
+             n_annotations = (anns, eq_ndatum)}
+    | DAnnotated {d_annotated = dat;
+                  d_anno_front = front_anns;
+                  d_anno_back = back_anns} ->
+      let front = List.map ndatum_of_ddatum front_anns in
+      let back  = List.map ndatum_of_ddatum back_anns  in
+      NAnnotated (ndatum_of_ddatum dat, (front @ back, eq_ndatum))
+
+  let eqv_ddatum : ddatum equality =
+    fun a b -> eq_ndatum (ndatum_of_ddatum a) (ndatum_of_ddatum b)
+  
+  let rec ddatum_of_ndatum : ndatum -> ddatum = function
+    | NAtom a -> DAtom a
+    | NForm {n_keywordeds = (nkws, _);
+             n_positionals = nposes;
+             n_annotations = (nanns, _)} ->
+      let dkws =
+        nkws
+        |&> (pair2 ddatum_of_ndatum)
+        |&> (fun (x,y) -> DKeywordNode (x,y)) in
+      let danns =
+        nanns
+        |&> ddatum_of_ndatum
+        |&> (fun x -> DAnnoNode x) in 
+      begin match nposes with
+        | [] -> DForm (dkws @ danns)
+        | head :: rest ->
+          let head = head |> ddatum_of_ndatum |> (fun x -> DDatumNode x) in
+          let rest = rest |&> ddatum_of_ndatum |&> (fun x -> DDatumNode x) in
+          DForm (head :: dkws @ danns @ rest)
+      end
+    | NAnnotated (ndat, (nanns, _)) ->
+      let ddat = ddatum_of_ndatum ndat in
+      let danns = List.map ddatum_of_ndatum nanns in
+      DAnnotated {d_annotated = ddat;
+                  d_anno_front = danns;
+                  d_anno_back = []}
+ 
 end
 
 module Parsetree = struct
