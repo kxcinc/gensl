@@ -42,7 +42,7 @@ let badparse str =
   try parse str |> function
       | Ok (datum, _) -> failwith Format.(asprintf "should fail: %s ==> %a" str pp_pdatum datum)
       | _e -> bingo()
-  with Failure _ -> bingo()
+  with Failure _ | Parse_error _ -> bingo()
 
 let%test "simple examples parses" =
   tryparse "1";
@@ -100,4 +100,9 @@ let%test "simple examples parses" =
   tryparse "!!app03";
   badparse "!app03";
   badparse "!!envelop";
+  tryparse "[1 2 3 @haha]";
+  tryparse "#{1 2 3 10}";
+  tryparse "#{1 2 @haha 3 10}";
+  badparse "#{1 2 :haha yes 3 10}";
+  tryparse "{:alice 10 :bob 20}";
   true

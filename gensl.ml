@@ -166,6 +166,9 @@ module Parsetree = struct
   type form_style =
     | ToplevelForm
     | SimpleForm                (**   ( .. ) *)
+    | ListForm                  (**   [ .. ] *)
+    | MapForm                   (**   { .. } *)
+    | SetForm                   (**  #{ .. } *)
     | NotAForm
 
   (** phantom elements,

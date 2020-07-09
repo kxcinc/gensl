@@ -1,3 +1,4 @@
+open Kxclib
 open Gensl
 open Utils
 open Parsing
@@ -51,7 +52,6 @@ module Make (Lexer : Lexer) = struct
   open struct
     let (>>=) = Result.bind
     let ok ps x = Ok (x,ps)
-    exception Parse_error of parse_error
     let fail span err : 'x presult =
       if !debugging
       then raise (Parse_error err)
@@ -121,7 +121,19 @@ module Make (Lexer : Lexer) = struct
     | (TkParenOpen, span), ps ->
        let kont = kont_simple_form span Infix
        in read_nodes (PickUntil (fun tok -> tok = TkParenClose, true), kont) ps
+    (* XXX restrictions in complex forms *)
+    | (TkBracketOpen, span), ps ->
+       let kont = kont_complex_form `List ListForm span Infix
+       in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
+    | (TkCurlyOpen, span), ps ->
+       let kont = kont_complex_form `Map MapForm span Infix
+       in read_nodes (PickUntil (fun tok -> tok = TkCurlyClose, true), kont) ps
+    | (TkPoundCurlyOpen, span), ps ->
+       let kont = kont_complex_form_set span Infix
+       in read_nodes (PickUntil (fun tok -> tok = TkCurlyClose, true), kont) ps
     | (TkParenClose, span), _ps
+    | (TkBracketClose, span), _ps
+    | (TkCurlyClose, span), _ps
     | (TkPickAll, span), _ps | (TkGrabAll, span), _ps
     | (TkPickK _, span), _ps | (TkGrabK _, span), _ps
     | (TkPickOne _, span), _ps | (TkGrabOne _, span), _ps
@@ -288,6 +300,23 @@ module Make (Lexer : Lexer) = struct
 
   and kont_simple_form span mode : pkont = fun nodes ->
     pdatum_form nodes SimpleForm DefaultReader span mode |> kont_ok
+  and kont_complex_form csymb style span mode : pkont = fun nodes ->
+    let head = { elem = CodifiedSymbolAtom csymb; mode = mode; span = span } in
+    let head = PAtom (head, DefaultReader) in
+    let head = PDatumNode head in
+    pdatum_form (head :: nodes) style DefaultReader span mode |> kont_ok
+  and kont_complex_form_set span mode : pkont = fun nodes ->
+    let true_ = pdatum_atom (BoolAtom true) span Phantomfix DefaultReader in
+    let tr = function
+      | PDatumNode dtm -> PKeywordNode (dtm, true_)
+      | PKeywordNode _ -> raise (Parse_error (Invalid_element_in_complex_form SetForm))
+      | node -> node in
+    let nodes = nodes |&> tr in
+    let csymb = `Set in
+    let head = { elem = CodifiedSymbolAtom csymb; mode = mode; span = span } in
+    let head = PAtom (head, DefaultReader) in
+    let head = PDatumNode head in
+    pdatum_form (head :: nodes) SetForm DefaultReader span mode |> kont_ok
   and kont_simple_form_head head span mode : pkont = fun nodes ->
     let nodes = (PDatumNode head) :: nodes
     in pdatum_form nodes SimpleForm DefaultReader span mode |> kont_ok

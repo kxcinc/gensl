@@ -22,6 +22,11 @@ module ParserTypes = struct
     | TkNumeric of string*string
     | TkParenOpen
     | TkParenClose
+    | TkBracketOpen
+    | TkBracketClose
+    | TkCurlyOpen
+    | TkPoundCurlyOpen
+    | TkCurlyClose
     | TkPickAll | TkGrabAll
     | TkPickK of bool*int | TkGrabK of bool*int
     | TkPickOne of bool | TkGrabOne of bool
@@ -78,4 +83,6 @@ type parse_error +=
  | Attempting_to_annotate_non_datum
  | Previous_datum_to_annotate_not_exists
  | Lexing_error of lexer_error
+ | Invalid_element_in_complex_form of form_style
 
+exception Parse_error of parse_error

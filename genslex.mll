@@ -80,6 +80,11 @@ and  token = parse
 
 | '(' { TkParenOpen }
 | ')' { TkParenClose }
+| '[' { TkBracketOpen }
+| ']' { TkBracketClose }
+| '{' { TkCurlyOpen }
+| "#{" { TkPoundCurlyOpen }
+| '}' { TkCurlyClose }
 
 | "," (digit+ as k) { TkPickK (false, int_of_string k) }
 | "." (digit+ as k) { TkGrabK (false, int_of_string k) }
