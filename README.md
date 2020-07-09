@@ -18,7 +18,9 @@ Version 0.1 Checklist
   - [ ] forgetting and embedding functions between representations [#4](https://github.com/kxcteam/gensl/issues/4)
   - [ ] builder for each representation [#5](https://github.com/kxcteam/gensl/issues/5)
 - [ ] migration to sedlex (no unicode support) [#6](https://github.com/kxcteam/gensl/issues/6)
-- [ ] perfect unparse (Parsetree --> Wirestring) [#7](https://github.com/kxcteam/gensl/issues/7)
+- [ ] unparsing (Parsetree --> Wirestring) [#7](https://github.com/kxcteam/gensl/issues/7)
+  - [ ] usable unparsing
+  - [ ] perfect unparsing
 - [ ] ordering and equality [#8](https://github.com/kxcteam/gensl/issues/8)
   - [x] canonical ordering
   - [ ] structural equality
@@ -28,7 +30,8 @@ Version 0.1 Checklist
   - [ ] (forget . embed) among representations constitute identity
   - [ ] forgetting functions accepts all inputs
   - [ ] (x : Datatree) => Parsetree => Wirestriing could be parsed back to x
-  - [ ] (parse . unparse) and (unparse . parse) constitute identity, except latter may see parsing error
+  - [ ] (parse . unparse) constitutes identity
+  - [ ] (unparse . parse) constitutes identity, except for parsing errors
 
 Roadmap to Version 1.0-ish
 
