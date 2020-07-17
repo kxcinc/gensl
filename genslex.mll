@@ -93,10 +93,13 @@ and  token = parse
 | "," (digit+ as k) "." { TkPickK (true, int_of_string k) }
 | "." (digit+ as k) "." { TkGrabK (true, int_of_string k) }
 | "," { TkPickOne true }
-| "." { TkGrabOne true }
+| "," space { TkComma }
 | ",," { TkPickAll }
 | ".." { TkGrabAll }
+| "." { TkGrabOne true }
 | "." space { TkGrabPoint }
+
+| "=>" { TkMapsto }
 
 | ":" { TkKeywordIndicator }
 | "@>" { TkAnnoNextIndicator }
@@ -112,18 +115,17 @@ module Lexer : Lexer with
   open Lexing
   type buffer = Lexing.lexbuf
   type location = Lexing.position
-  type nonrec pstate = (buffer, location) pstate
+  type nonrec pstate = buffer pstate
+  type nonrec lexresult = buffer lexresult
+
+  type lexer_error += No_next_valid_token
 
   let loc buf = buf.lex_curr_p
-  let source buf = `DirectInput (Some (loc buf).pos_fname)
+  (* let source buf = `DirectInput (Some (loc buf).pos_fname) *)
   let lexer buf =
-    let tok = token buf in
-    let span = {
-        span_start = buf.lex_start_p;
-        span_end = buf.lex_curr_p;
-        span_leading = NoLeadingInfo;
-        span_source = source buf;
-      } in
-    Ok (tok,span)
+    try
+      let tok = token buf in
+      Ok (tok, pstate buf)
+    with Failure _ -> Error [Lexing_error No_next_valid_token]
 end
 }

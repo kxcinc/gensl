@@ -30,7 +30,7 @@ let parse str =
   let open Lexing in
   let module P = Parser.Default in
   let lexbuf = from_string str in
-  P.read_datum (Parser.Default.pstate lexbuf)
+  P.read_datum (pstate lexbuf)
 
 let tryparse str =
   parse str |> function
@@ -106,6 +106,7 @@ let%test "simple examples parses" =
   badparse "#{1 2 :haha yes 3 10}";
   tryparse "{:alice 10 :bob 20}";
   tryparse "#[1 2 3 6 4]";
+  tryparse "#1[1 2 3]";
   tryparse "#0[3]";
   tryparse "#0[@anno 3]";
   badparse "#0[]";
@@ -118,4 +119,5 @@ let%test "simple examples parses" =
   (* badparse "#2[[1 2 5] [3 6]]";
    * badparse "#2[1 2 6]";
    * badparse "#0[3 2]"; *)
+  tryparse "{foo => 10, bar => 20}";
   true

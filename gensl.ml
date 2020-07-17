@@ -322,107 +322,108 @@ end
 
 module Parsetree = struct
   open Basetypes
-
-  type leading = Leading of string | NoLeadingInfo
-  type ghost_source = ..
-  type span_source =
-    [ `File of string
-    | `DirectInput of string option
-    | `Ghost of ghost_source ]
-  type 'l span = {
-      span_start: 'l;
-      span_end  : 'l;
-      span_leading : leading;   (** leading spaces *)
-      span_source  : span_source;
-    }
-
-  type flat_location = { line: int; col: int; }
-  type stream_location = int
+  open Sexplib.Std
 
   type parse_error = ..
 
-  type syntax_mode =
+  (* syntax_mode and form_style should only concern forms *)
+  type form_fixness =
     | Infix
-    | Prefix  of [ `PickAll | `PickOne | `PickK of int ]
-    | Postfix of [ `GrabAll | `GrabOne | `GrabK of int ]
-    | Phantomfix
+    | Prefix  of [ `PickAll | `PickOne | `PickK of int ]*bool (* with-head-node? *)
+    | Postfix of [ `GrabAll | `GrabOne | `GrabK of int ]*bool (* with-head-node? *)
   type form_style =
     | ToplevelForm
     | SimpleForm                (**   ( .. ) *)
     | ListForm                  (**   [ .. ] *)
-    | VectorForm                (** #k[ .. ], k could be omitted *)
+    | VectorForm of int option  (** #k[ .. ], k could be omitted *)
     | MapForm                   (**   { .. } *)
     | SetForm                   (**  #{ .. } *)
-    | NotAForm
+  [@@deriving sexp]
 
-  (** phantom elements,
-      phantom in the sense that
-      they don't semantically contribute to the Datatree *)
-  type phantom = 
+  (** decor elements, who exists in the wirestring but
+      not semantically contributing to the Datatree *)
+  type decor =
     | GrabPoint        (** .  - the postfix grab-point *)
-    | GrabAllOperator  (** .. - the postfix grab-all operator *)
-    | PickAllOperator  (** ,, - the prefix pick-all operator *)
+    | CommaSeparator   (** ,  - the comma separator *)
     | ParseError of parse_error
 
-  type reader_style =
-    | DefaultReader
-    | DataReader of string  (**  lexp:.. *)
+  (** a phantom is an element that is a desugering of other
+      elements in the wirestring, that doesn't not appear directly
+       representation in the wirestring *)
+  type representation = [ `Direct | `Phantom | `ReaderMacro of string*macro_body ]
+  (* XXX leading on `Direct and `ReaderMacro *)
 
-  type 'l pdatum =
-    | PAtom of 'l patom*reader_style
-    | PForm of ('l pnode list*form_style*reader_style, 'l) pelem
-    | PAnnotated of {
-        p_annotated  : 'l pdatum;
-        p_anno_front : 'l pdatum list;
-        p_anno_back  : 'l pdatum list; (** !!reversed *)
+  and  macro_body =
+    | LiteralMacroBody of string
+    | StringMacroBody of string
+    | FormMacroBody of pform
+
+  and  pdatum =
+    | PAtom of patom
+    | PForm of pform
+    | PAnnotated of pannotated_record pelem
+  and  pnode =
+    | PKeywordNode of pdatum * pdatum
+    | PDatumNode of pdatum
+    | PAnnoNode of pdatum
+    | PDecorNode of decor pelem
+  and  patom = atom pelem
+  and  pform = (pnode list*form_style*form_fixness) pelem
+  and  pannotated_record = {
+        p_annotated  : pdatum;
+        p_anno_front : pdatum list;
+        p_anno_back  : pdatum list; (** !!reversed *)
       }
-  and  'l pnode =
-    | PKeywordNode of 'l pdatum * 'l pdatum
-    | PDatumNode of 'l pdatum
-    | PAnnoNode of 'l pdatum
-    | PPhantomNode of (phantom, 'l) pelem
-  and  'l patom = (atom, 'l) pelem
 
-  and  ('x, 'l) pelem = {
+  and  'x pelem = {
       elem: 'x;
-      mode: syntax_mode;
-      span: 'l span
+      repr: representation;
+      (* XXX span *)
     }
 
-  let patom atom span mode : 'l patom = { elem = atom; span; mode; }
-  let pdatum_atom atom span mode style : 'l pdatum =
-    PAtom (patom atom span mode, style)
-  let pdatum_form nodes form_style reader_style span mode : 'l pdatum =
-    let elem = (nodes, form_style, reader_style) in
-    PForm { elem; span; mode; }
-  let pdatum_anno_front anno datum : 'l pdatum = match datum with
-    | PAnnotated ({ p_anno_front; _ } as r) ->
-       PAnnotated ({ r with p_anno_front = anno :: p_anno_front })
+  let patom atom repr : patom = { elem = atom; repr; }
+  let pdatum_atom atom repr : pdatum =
+    PAtom (patom atom repr)
+  let pdatum_form nodes fstyle fix repr : pdatum =
+    let elem = (nodes, fstyle, fix) in
+    PForm { elem; repr; }
+  let pdatum_annofront anno datum : pdatum = match datum with
+    | PAnnotated { elem = { p_anno_front; _ } as r; _} ->
+       PAnnotated ({ elem = { r with p_anno_front = anno :: p_anno_front };
+                     repr = `Direct })
     | _ -> PAnnotated {
-               p_annotated = datum;
-               p_anno_front = [anno];
-               p_anno_back = [];
-             }
-  let pdatum_anno_back anno datum : 'l pdatum = match datum with
-    | PAnnotated ({ p_anno_back; _ } as r) ->
-       PAnnotated ({ r with p_anno_back = anno :: p_anno_back })
+               elem = {
+                 p_annotated = datum;
+                 p_anno_front = [anno];
+                 p_anno_back = [];
+               };
+               repr = `Direct; }
+  let pdatum_annoback anno datum : pdatum = match datum with
+    | PAnnotated { elem = { p_anno_back; _ } as r; _} ->
+       PAnnotated ({ elem = { r with p_anno_back = anno :: p_anno_back };
+                     repr = `Direct })
     | _ -> PAnnotated {
-               p_annotated = datum;
-               p_anno_front = [];
-               p_anno_back = [anno];
-             }
+        elem = {
+          p_annotated = datum;
+          p_anno_front = [];
+          p_anno_back = [anno];
+        };
+        repr = `Direct; }
+  let pnode_decor decor : pnode = PDecorNode { elem = decor; repr = `Direct }
 
   open Datatree
-  let rec ddatum_of_pdatum : 'l pdatum -> ddatum = function
-    | PAtom (_a, _rs) -> [%noimplval]
+  let rec ddatum_of_pdatum : pdatum -> ddatum = function
+    | PAtom _a -> [%noimplval]
     | PForm { elem = (_nodes, _fs, _rs);
-              mode = _syn_mod;
-              span = _sp } -> [%noimplval]
-    | PAnnotated { p_annotated  = _dat;
-                   p_anno_front = _ann_f;
-                   p_anno_back  = _ann_b } -> [%noimplval]
+              _ } -> [%noimplval]
+    | PAnnotated {
+        elem = {
+          p_annotated = _datum;
+          p_anno_front = _front;
+          p_anno_back = _back;
+        };
+        _ ; } -> [%noimplval]
 
-(* XXX unparse_datum *)
 end
 
 (* XXX move ParsetreePrinter into Parsetree *)
@@ -444,16 +445,23 @@ module ParsetreePrinter = struct
     | BoolAtom b -> Atom (sprintf "bool:%b" b)
   let sexp_patom { elem; _ } = sexp_atom elem
 
+  let sexp_decor = function
+    | GrabPoint -> Atom "decor:GrabPoint"
+    | CommaSeparator -> Atom "decor:CommaSeparator"
+    | ParseError _ -> Atom "decor:ParseError(_)"
+
   let rec sexp_pnode = function
     | PDatumNode dtm -> sexp_pdatum dtm
     | PAnnoNode dtm -> List [Atom "anno"; sexp_pdatum dtm]
     | PKeywordNode (kw,value) -> List [Atom "kwnode"; sexp_pdatum kw; sexp_pdatum value]
-    | PPhantomNode _ -> Atom "somephantom"
+    | PDecorNode { elem = d; _ } -> sexp_decor d
 
   and     sexp_pdatum = function
-    | PAtom (patom,_) -> sexp_patom patom
-    | PForm { elem = (nodes, _, _) ; _ } -> List (nodes |> List.map sexp_pnode)
-    | PAnnotated { p_annotated; p_anno_front; p_anno_back } ->
+    | PAtom patom -> sexp_patom patom
+    | PForm { elem = (nodes, SimpleForm, _) ; _ } -> List (nodes |> List.map sexp_pnode)
+    | PForm { elem = (nodes, fstyle, _) ; _ } ->
+       List (Atom "#cf" :: (sexp_of_form_style fstyle) :: (nodes |> List.map sexp_pnode))
+    | PAnnotated { elem = { p_annotated; p_anno_front; p_anno_back }; _ } ->
        let l = [Atom "annotated"; p_annotated |> sexp_pdatum]
                @ [Atom ":front"] @ (p_anno_front |> List.map sexp_pdatum)
                @ [Atom ":back"] @ (List.rev p_anno_back |> List.map sexp_pdatum)
@@ -464,7 +472,7 @@ module ParsetreePrinter = struct
   let pp_atom ppf = composite (Sexp.pp_hum ppf) sexp_atom
   let pp_pdatum ppf = composite (Sexp.pp_hum ppf) sexp_pdatum
   let pp_toplevel ppf = function
-    | PForm { elem = (nodes, ToplevelForm,_); _ } ->
+    | PForm { elem = (nodes, ToplevelForm, _); _ } ->
        let open Format in
        let len = List.length nodes in
        pp_print_flush ppf();
