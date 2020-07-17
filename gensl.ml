@@ -181,6 +181,12 @@ module Canonicaltree = struct
   (** semantical equivalence of two datums *)
   let eqv_cdatum x y = cdatum_ordering x y = 0
 
+  let catom atom = CAtom atom
+  let cform : (cdatum * cdatum) list -> cdatum list -> cdatum =
+    fun keywordeds positionals ->
+    CForm { ckwd = (keywordeds, (=));
+            cpos = positionals }
+
   (* XXX sexp_* and pp_* *)
 end
 
@@ -300,7 +306,18 @@ module Datatree = struct
       DAnnotated {d_annotated = ddat;
                   d_anno_front = danns;
                   d_anno_back = []}
- 
+
+  let datom atom = DAtom atom
+  let dform nodes = DForm nodes
+  let dannotated : ddatum -> ddatum list -> ddatum list -> ddatum =
+    fun d_ann d_front d_back ->
+    DAnnotated { d_annotated = d_ann;
+                 d_anno_front = d_front;
+                 d_anno_back = d_back }
+  let dkeywordnode kw dat = DKeywordNode (kw, dat)
+  let ddatumnode d = DDatumNode d
+  let dannonode d = DAnnoNode d
+  
 end
 
 module Parsetree = struct
@@ -394,6 +411,16 @@ module Parsetree = struct
                p_anno_front = [];
                p_anno_back = [anno];
              }
+
+  open Datatree
+  let rec ddatum_of_pdatum : 'l pdatum -> ddatum = function
+    | PAtom (_a, _rs) -> [%noimplval]
+    | PForm { elem = (_nodes, _fs, _rs);
+              mode = _syn_mod;
+              span = _sp } -> [%noimplval]
+    | PAnnotated { p_annotated  = _dat;
+                   p_anno_front = _ann_f;
+                   p_anno_back  = _ann_b } -> [%noimplval]
 
 (* XXX unparse_datum *)
 end
