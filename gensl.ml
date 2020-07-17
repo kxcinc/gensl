@@ -413,17 +413,78 @@ module Parsetree = struct
 
   open Datatree
   let rec ddatum_of_pdatum : pdatum -> ddatum = function
-    | PAtom _a -> [%noimplval]
-    | PForm { elem = (_nodes, _fs, _rs);
-              _ } -> [%noimplval]
+    | PAtom { elem = a;
+              _} -> DAtom a
+    | PForm { elem = (nodes, style, _fixness);
+              _ } ->
+      begin
+        let convert nodes =
+          let process acc = function
+            | PDecorNode _ -> acc
+            | PKeywordNode (k, v) ->
+              let node = DKeywordNode (ddatum_of_pdatum k, ddatum_of_pdatum v) in
+              node :: acc
+            | PDatumNode dat -> DDatumNode (ddatum_of_pdatum dat) :: acc
+            | PAnnoNode dat -> DAnnoNode (ddatum_of_pdatum dat) :: acc
+          in List.fold_left process [] nodes |> List.rev
+        in
+        let append_head csymb nodes =
+          let head = DDatumNode (DAtom (CodifiedSymbolAtom csymb)) in
+          head :: nodes
+        in
+        match style with
+        | ToplevelForm ->
+          DForm (append_head `Toplevel (convert nodes))
+        | SimpleForm -> DForm (convert nodes)
+        | ListForm -> DForm (append_head `List (convert nodes))
+        | MapForm -> DForm (append_head `Map (convert nodes))
+        | VectorForm _ -> failwith "VectorForm is not yet supported!"
+        | SetForm ->
+          let process' acc = function
+            | PDecorNode _ -> acc
+            | PKeywordNode (_, _) -> failwith "Keyword node is invalid in SetForm!"
+            | PDatumNode dat ->
+              DKeywordNode (ddatum_of_pdatum dat, DAtom (BoolAtom true)) :: acc
+            | PAnnoNode dat -> DAnnoNode (ddatum_of_pdatum dat) :: acc
+          in
+          let nodes = List.fold_left process' [] nodes |> List.rev in
+          DForm (append_head `Set nodes)
+      end
     | PAnnotated {
         elem = {
-          p_annotated = _datum;
-          p_anno_front = _front;
-          p_anno_back = _back;
+          p_annotated  = datum;
+          p_anno_front = front;
+          p_anno_back  = back;
         };
-        _ ; } -> [%noimplval]
+        _ ; } ->
+      DAnnotated {
+        d_annotated  = ddatum_of_pdatum datum;
+        d_anno_front = List.map ddatum_of_pdatum front;
+        d_anno_back  = List.map ddatum_of_pdatum back;
+      }
 
+  let rec pnode_of_dnode = function
+    | DKeywordNode (k, v) ->
+      PKeywordNode (pdatum_of_ddatum k, pdatum_of_ddatum v)
+    | DDatumNode dat -> PDatumNode (pdatum_of_ddatum dat)
+    | DAnnoNode dat -> PAnnoNode (pdatum_of_ddatum dat)
+  and pdatum_of_ddatum : ddatum -> pdatum = function
+    | DAtom a -> PAtom {elem = a; repr = `Direct}
+    | DForm nodes ->
+      let nodes = List.map pnode_of_dnode nodes in
+      let elem = (nodes, SimpleForm, Infix) in
+      PForm {elem = elem; repr = `Direct}
+    | DAnnotated { d_annotated  = ddat;
+                   d_anno_front = dfront;
+                   d_anno_back  = dback } ->
+      let pdat = pdatum_of_ddatum ddat in
+      let pfront = List.map pdatum_of_ddatum dfront in
+      let pback = List.map pdatum_of_ddatum dback in
+      let pann = { p_annotated  = pdat;
+                   p_anno_front = pfront;
+                   p_anno_back  = pback } in
+      PAnnotated {elem = pann; repr = `Direct}
+  
 end
 
 (* XXX move ParsetreePrinter into Parsetree *)
