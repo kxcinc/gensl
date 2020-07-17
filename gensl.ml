@@ -521,7 +521,7 @@ module ParsetreePrinter = struct
     | PAtom patom -> sexp_patom patom
     | PForm { elem = (nodes, SimpleForm, _) ; _ } -> List (nodes |> List.map sexp_pnode)
     | PForm { elem = (nodes, fstyle, _) ; _ } ->
-       List (Atom "#cf" :: (sexp_of_form_style fstyle) :: (nodes |> List.map sexp_pnode))
+       List (Atom Format.(asprintf "#cf:%a" Sexp.pp_hum (sexp_of_form_style fstyle)) :: (nodes |> List.map sexp_pnode))
     | PAnnotated { elem = { p_annotated; p_anno_front; p_anno_back }; _ } ->
        let l = [Atom "annotated"; p_annotated |> sexp_pdatum]
                @ [Atom ":front"] @ (p_anno_front |> List.map sexp_pdatum)
