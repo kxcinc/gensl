@@ -94,6 +94,19 @@ module Basetypes = struct
     let open Sexplib.Sexp in
     Atom ("csymb:" ^ (name_of_csymb csymb))
 
+  let sexp_atom =
+    let open Format in
+    let open Sexplib.Sexp in
+    function
+    | SymbolAtom str -> Atom ("symb:" ^ str)
+    | CodifiedSymbolAtom csymb -> Atom ("csymb:" ^ (name_of_csymb csymb))
+    | StringAtom str -> Atom ("str:" ^ str)
+    | BytesAtom bytes ->
+       let encoded = Bytes.to_string bytes
+       in Atom ("bytes:" ^ encoded)
+    | NumericAtom (num,suf) -> Atom (num^suf)
+    | BoolAtom b -> Atom (sprintf "bool:%b" b)
+
   (** !!this is to serve as the specification of atom ordering *)
   let compare_atom : atom -> atom -> int = fun a1 a2 ->
     let catprec = function
@@ -124,6 +137,8 @@ module Basetypes = struct
        compare (len b1) (len b2) >>= fun () -> compare (tr b1) (tr b2)
     | _ -> failwith ("panic: "^__LOC__)
 
+  let composite f g x = f (g x)
+
     (* XXX csymb_of_name, csymb_of_code *)
 end
 
@@ -134,6 +149,8 @@ end
 
 module Canonicaltree = struct
   open Basetypes
+  open Sexplib.Type
+  open Sexplib
 
   type cdatum =
     | CAtom of atom
@@ -187,11 +204,20 @@ module Canonicaltree = struct
     CForm { ckwd = (keywordeds, (=));
             cpos = positionals }
 
-  (* XXX sexp_* and pp_* *)
+  let rec sexp_cdatum = function
+    | CAtom a -> sexp_atom a
+    | CForm { ckwd = (ckws, _);
+              cpos = cposes } ->
+      let sexp_kw = fun (k, v) -> List [Atom "ckw"; sexp_cdatum k; sexp_cdatum v] in
+      List (List.map sexp_kw ckws @ List.map sexp_cdatum cposes)
+
+  let pp_cdatum ppf = composite (Sexp.pp_hum ppf) sexp_cdatum
 end
 
 module Normaltree = struct
   open Basetypes
+  open Sexplib.Type
+  open Sexplib
 
   type ndatum =
     | NAtom of atom
@@ -232,6 +258,20 @@ module Normaltree = struct
       NForm {n_keywordeds = map_assoc ndatum_of_cdatum ndatum_of_cdatum eq_ndatum ckws ;
              n_positionals = List.map ndatum_of_cdatum cposes ;
              n_annotations = ([], eq_ndatum) }
+
+  let rec sexp_ndatum = function
+    | NAtom a -> sexp_atom a
+    | NForm { n_keywordeds = (nkws, _);
+              n_positionals = nposes;
+              n_annotations = (nanns, _) } ->
+      let sexp_kw = fun (k, v) -> List [Atom "nkw"; sexp_ndatum k; sexp_ndatum v] in
+      let sexp_ann = fun dat -> List [Atom "nann"; sexp_ndatum dat] in
+      List (List.map sexp_kw nkws @ List.map sexp_ndatum nposes @ List.map sexp_ann nanns)
+    | NAnnotated (ndat, (nannos, _)) ->
+      List (Atom "nannotated" :: sexp_ndatum ndat ::
+            List.map sexp_ndatum nannos)
+
+  let pp_ndatum ppf = composite (Sexp.pp_hum ppf) sexp_ndatum
 end
 
 module Datatree = struct
@@ -495,15 +535,6 @@ module ParsetreePrinter = struct
   open Sexplib.Type
   open Sexplib
 
-  let sexp_atom = function
-    | SymbolAtom str -> Atom ("symb:" ^ str)
-    | CodifiedSymbolAtom csymb -> Atom ("csymb:" ^ (name_of_csymb csymb))
-    | StringAtom str -> Atom ("str:" ^ str)
-    | BytesAtom bytes ->
-       let encoded = Bytes.to_string bytes
-       in Atom ("bytes:" ^ encoded)
-    | NumericAtom (num,suf) -> Atom (num^suf)
-    | BoolAtom b -> Atom (sprintf "bool:%b" b)
   let sexp_patom { elem; _ } = sexp_atom elem
 
   let sexp_decor = function
@@ -528,7 +559,6 @@ module ParsetreePrinter = struct
                @ [Atom ":back"] @ (List.rev p_anno_back |> List.map sexp_pdatum)
        in List l
 
-  let composite f g x = f (g x)
   let pp_patom ppf = composite (Sexp.pp_hum ppf) sexp_patom
   let pp_atom ppf = composite (Sexp.pp_hum ppf) sexp_atom
   let pp_pdatum ppf = composite (Sexp.pp_hum ppf) sexp_pdatum
