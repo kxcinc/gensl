@@ -145,8 +145,6 @@ end
 (* XXX ASCII sanity check/unicode normalization (NFC) on StringAtom *)
 (* XXX SymbolAtom could only be alphanumeric so fine for now (NFKC in the future) *)
 
-(* XXX conversion between the four representations *)
-
 module Canonicaltree = struct
   open Basetypes
   open Sexplib.Type
@@ -208,7 +206,7 @@ module Canonicaltree = struct
     | CAtom a -> sexp_atom a
     | CForm { ckwd = (ckws, _);
               cpos = cposes } ->
-      let sexp_kw = fun (k, v) -> List [Atom "ckw"; sexp_cdatum k; sexp_cdatum v] in
+      let sexp_kw = fun (k, v) -> List [Atom "kwnode"; sexp_cdatum k; sexp_cdatum v] in
       List (List.map sexp_kw ckws @ List.map sexp_cdatum cposes)
 
   let pp_cdatum ppf = composite (Sexp.pp_hum ppf) sexp_cdatum
@@ -264,11 +262,12 @@ module Normaltree = struct
     | NForm { n_keywordeds = (nkws, _);
               n_positionals = nposes;
               n_annotations = (nanns, _) } ->
-      let sexp_kw = fun (k, v) -> List [Atom "nkw"; sexp_ndatum k; sexp_ndatum v] in
-      let sexp_ann = fun dat -> List [Atom "nann"; sexp_ndatum dat] in
+      let sexp_kw = fun (k, v) -> List [Atom "kwnode"; sexp_ndatum k; sexp_ndatum v] in
+      let sexp_ann = fun dat -> List [Atom "anno"; sexp_ndatum dat] in
       List (List.map sexp_kw nkws @ List.map sexp_ndatum nposes @ List.map sexp_ann nanns)
     | NAnnotated (ndat, (nannos, _)) ->
-      List (Atom "nannotated" :: sexp_ndatum ndat ::
+      List (Atom "annotated" :: sexp_ndatum ndat ::
+            Atom ":front" ::
             List.map sexp_ndatum nannos)
 
   let pp_ndatum ppf = composite (Sexp.pp_hum ppf) sexp_ndatum
@@ -276,6 +275,8 @@ end
 
 module Datatree = struct
   open Basetypes
+  open Sexplib.Type
+  open Sexplib
 
   (* "AST" of the data term *)
   type ddatum =
@@ -357,6 +358,23 @@ module Datatree = struct
   let dkeywordnode kw dat = DKeywordNode (kw, dat)
   let ddatumnode d = DDatumNode d
   let dannonode d = DAnnoNode d
+
+  let rec sexp_dnode = function
+    | DKeywordNode (k, v) -> List [Atom "kwnode"; sexp_ddatum k; sexp_ddatum v]
+    | DDatumNode dat -> sexp_ddatum dat
+    | DAnnoNode dat -> List [Atom "anno"; sexp_ddatum dat]
+  and sexp_ddatum = function
+    | DAtom a -> sexp_atom a
+    | DForm nodes -> List (List.map sexp_dnode nodes)
+    | DAnnotated { d_annotated = dat ;
+                   d_anno_front = fronts ;
+                   d_anno_back = backs } ->
+      let l = [Atom "annotated"; sexp_ddatum dat]
+              @ [Atom ":front"] @ (List.map sexp_ddatum fronts)
+              @ [Atom ":back"] @ (List.map sexp_ddatum backs)
+      in List l
+
+  let pp_ddatum ppf = composite (Sexp.pp_hum ppf) sexp_ddatum
   
 end
 
