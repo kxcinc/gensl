@@ -16,12 +16,12 @@ module Basetypes = struct
       | `Appsymb05 | `Appsymb06 | `Appsymb07 | `Appsymb08 (* 24..27 *)
       | `Appsymb09 | `Appsymb10 | `Appsymb11 | `Appsymb12 (* 28..31 *) ]
 
-  let rec map_assoc : ('a1 -> 'b1) -> ('a2 -> 'b2) -> 'b1 equality -> ('a1, 'a2) assoc -> ('b1, 'b2) assoc =
+  let map_assoc : ('a1 -> 'b1) -> ('a2 -> 'b2) -> 'b1 equality -> ('a1, 'a2) assoc -> ('b1, 'b2) assoc =
     fun f g b_eq (al, _a_eq) ->
     let fg : ('a1 * 'a2) -> ('b1 * 'b2) = fun (x, y) -> (f x, g y) in
     (List.map fg al, b_eq)
 
-  let rec pair : ('a1 -> 'b1) -> ('a2 -> 'b2) -> ('a1 * 'a2) -> ('b1 * 'b2) =
+  let pair : ('a1 -> 'b1) -> ('a2 -> 'b2) -> ('a1 * 'a2) -> ('b1 * 'b2) =
     fun f g (x, y) -> (f x, g y)
 
   let pair2 : ('a -> 'b) -> ('a * 'a) -> ('b * 'b) = fun f -> pair f f
