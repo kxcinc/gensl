@@ -9,7 +9,7 @@ open ParserTypes
 
 let pp_pdatum = ParsetreePrinter.pp_pdatum
 
-let output_debug = ref true
+let output_debug = ref false
 
 let debug_msg msg =
   if !output_debug then
