@@ -3,8 +3,8 @@
 
 module Basetypes = struct
   type 'a equality = 'a -> 'a -> bool
-  type ('a, 'b) assoc = ('a*'b) list*('a equality)
-  type 'a set = ('a list)*('a equality)
+  type ('a, 'b) assoc = ('a*'b) list
+  type 'a set = ('a list)
 
   type csymb =
     [ | `Toplevel | `Envelop | `Metadata   (* 0..2 *)
@@ -16,10 +16,10 @@ module Basetypes = struct
       | `Appsymb05 | `Appsymb06 | `Appsymb07 | `Appsymb08 (* 24..27 *)
       | `Appsymb09 | `Appsymb10 | `Appsymb11 | `Appsymb12 (* 28..31 *) ]
 
-  let map_assoc : ('a1 -> 'b1) -> ('a2 -> 'b2) -> 'b1 equality -> ('a1, 'a2) assoc -> ('b1, 'b2) assoc =
-    fun f g b_eq (al, _a_eq) ->
+  let map_assoc : ('a1 -> 'b1) -> ('a2 -> 'b2) -> ('a1, 'a2) assoc -> ('b1, 'b2) assoc =
+    fun f g al ->
     let fg : ('a1 * 'a2) -> ('b1 * 'b2) = fun (x, y) -> (f x, g y) in
-    (List.map fg al, b_eq)
+    (List.map fg al)
 
   let pair : ('a1 -> 'b1) -> ('a2 -> 'b2) -> ('a1 * 'a2) -> ('b1 * 'b2) =
     fun f g (x, y) -> (f x, g y)
@@ -164,8 +164,8 @@ module Canonicaltree = struct
     | CAtom a1, CAtom a2 -> compare_atom a1 a2
     | CAtom _, CForm _ -> -1
     | CForm _, CAtom _ -> 1
-    | CForm { ckwd = (ckwd1,_); cpos = cpos1 },
-      CForm { ckwd = (ckwd2,_); cpos = cpos2 } ->
+    | CForm { ckwd = (ckwd1); cpos = cpos1 },
+      CForm { ckwd = (ckwd2); cpos = cpos2 } ->
        let open struct
              type node = Kw of cdatum*cdatum | Pos of cdatum
              let mkkw (k,v) = Kw (k,v) and mkpos x = Pos x
@@ -199,12 +199,12 @@ module Canonicaltree = struct
   let catom atom = CAtom atom
   let cform : (cdatum * cdatum) list -> cdatum list -> cdatum =
     fun keywordeds positionals ->
-    CForm { ckwd = (keywordeds, (=));
+    CForm { ckwd = (keywordeds :> (cdatum, cdatum) assoc);
             cpos = positionals }
 
   let rec sexp_cdatum = function
     | CAtom a -> sexp_atom a
-    | CForm { ckwd = (ckws, _);
+    | CForm { ckwd = ckws;
               cpos = cposes } ->
       let sexp_kw = fun (k, v) -> List [Atom "kwnode"; sexp_cdatum k; sexp_cdatum v] in
       List (List.map sexp_kw ckws @ List.map sexp_cdatum cposes)
@@ -235,7 +235,7 @@ module Normaltree = struct
     match nt with
     | NAtom a -> CAtom a
     | NForm {n_keywordeds = nkws; n_positionals = nposes; n_annotations = _ann} ->
-      CForm {ckwd = map_assoc cdatum_of_ndatum cdatum_of_ndatum (=) nkws ;
+      CForm {ckwd = map_assoc cdatum_of_ndatum cdatum_of_ndatum nkws ;
              cpos = List.map cdatum_of_ndatum nposes}
     | NAnnotated (ndat, _annos) -> cdatum_of_ndatum ndat
         
@@ -243,29 +243,29 @@ module Normaltree = struct
   let natom atom = NAtom atom
   let nform : (ndatum*ndatum) list -> ndatum list -> ndatum list -> ndatum =
     fun keywordeds positionals annotations ->
-    NForm { n_keywordeds = (keywordeds, eq_ndatum);
+    NForm { n_keywordeds = keywordeds;
             n_positionals = positionals;
-            n_annotations = (annotations, eq_ndatum) }
+            n_annotations = annotations }
   let nannotated : ndatum -> ndatum list -> ndatum =
     fun annotated annotations ->
-    NAnnotated (annotated, (annotations, eq_ndatum))
+    NAnnotated (annotated, annotations)
 
   let rec ndatum_of_cdatum : cdatum -> ndatum = function
     | CAtom a -> NAtom a
     | CForm {ckwd = ckws; cpos = cposes} ->
-      NForm {n_keywordeds = map_assoc ndatum_of_cdatum ndatum_of_cdatum eq_ndatum ckws ;
+      NForm {n_keywordeds = map_assoc ndatum_of_cdatum ndatum_of_cdatum ckws ;
              n_positionals = List.map ndatum_of_cdatum cposes ;
-             n_annotations = ([], eq_ndatum) }
+             n_annotations = [] }
 
   let rec sexp_ndatum = function
     | NAtom a -> sexp_atom a
-    | NForm { n_keywordeds = (nkws, _);
+    | NForm { n_keywordeds = nkws;
               n_positionals = nposes;
-              n_annotations = (nanns, _) } ->
+              n_annotations = nanns } ->
       let sexp_kw = fun (k, v) -> List [Atom "kwnode"; sexp_ndatum k; sexp_ndatum v] in
       let sexp_ann = fun dat -> List [Atom "anno"; sexp_ndatum dat] in
       List (List.map sexp_kw nkws @ List.map sexp_ndatum nposes @ List.map sexp_ann nanns)
-    | NAnnotated (ndat, (nannos, _)) ->
+    | NAnnotated (ndat, nannos) ->
       List (Atom "annotated" :: sexp_ndatum ndat ::
             Atom ":front" ::
             List.map sexp_ndatum nannos)
@@ -308,24 +308,28 @@ module Datatree = struct
         end
       in
       let (kws, posses, anns) = List.fold_left f ([], [], []) dnodes in
-      NForm {n_keywordeds = (kws, eq_ndatum);
+      let kws = kws |> List.sort @@ fun (k1,_) (k2,_) ->
+                                    let tr = cdatum_of_ndatum in
+                                    Canonicaltree.cdatum_ordering (tr k1) (tr k2) in
+      NForm {n_keywordeds = kws;
              n_positionals = posses;
-             n_annotations = (anns, eq_ndatum)}
+             n_annotations = anns}
     | DAnnotated {d_annotated = dat;
                   d_anno_front = front_anns;
                   d_anno_back = back_anns} ->
       let front = List.map ndatum_of_ddatum front_anns in
       let back  = List.map ndatum_of_ddatum back_anns  in
-      NAnnotated (ndatum_of_ddatum dat, (front @ back, eq_ndatum))
+      (* XXX sort the annotations *)
+      NAnnotated (ndatum_of_ddatum dat, front @ back)
 
   let eqv_ddatum : ddatum equality =
     fun a b -> eq_ndatum (ndatum_of_ddatum a) (ndatum_of_ddatum b)
   
   let rec ddatum_of_ndatum : ndatum -> ddatum = function
     | NAtom a -> DAtom a
-    | NForm {n_keywordeds = (nkws, _);
+    | NForm {n_keywordeds = nkws;
              n_positionals = nposes;
-             n_annotations = (nanns, _)} ->
+             n_annotations = nanns} ->
       let dkws =
         nkws
         |&> (pair2 ddatum_of_ndatum)
@@ -341,7 +345,7 @@ module Datatree = struct
           let rest = rest |&> ddatum_of_ndatum |&> (fun x -> DDatumNode x) in
           DForm (head :: dkws @ danns @ rest)
       end
-    | NAnnotated (ndat, (nanns, _)) ->
+    | NAnnotated (ndat, nanns) ->
       let ddat = ddatum_of_ndatum ndat in
       let danns = List.map ddatum_of_ndatum nanns in
       DAnnotated {d_annotated = ddat;
