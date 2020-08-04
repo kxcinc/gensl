@@ -311,6 +311,9 @@ module Datatree = struct
       let kws = kws |> List.sort @@ fun (k1,_) (k2,_) ->
                                     let tr = cdatum_of_ndatum in
                                     Canonicaltree.cdatum_ordering (tr k1) (tr k2) in
+      let anns = anns |> List.sort @@ fun d1 d2 ->
+                                    let tr = cdatum_of_ndatum in
+                                    Canonicaltree.cdatum_ordering (tr d1) (tr d2) in
       NForm {n_keywordeds = kws;
              n_positionals = posses;
              n_annotations = anns}
@@ -343,7 +346,7 @@ module Datatree = struct
         | head :: rest ->
           let head = head |> ddatum_of_ndatum |> (fun x -> DDatumNode x) in
           let rest = rest |&> ddatum_of_ndatum |&> (fun x -> DDatumNode x) in
-          DForm (head :: dkws @ danns @ rest)
+          DForm (head :: dkws @ rest @ danns)
       end
     | NAnnotated (ndat, nanns) ->
       let ddat = ddatum_of_ndatum ndat in
@@ -525,6 +528,7 @@ module Parsetree = struct
         d_anno_back  = List.map ddatum_of_pdatum back;
       }
 
+  (* TODO: proper resugaring *)
   let rec pnode_of_dnode = function
     | DKeywordNode (k, v) ->
       PKeywordNode (pdatum_of_ddatum k, pdatum_of_ddatum v)
