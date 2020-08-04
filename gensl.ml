@@ -528,7 +528,6 @@ module Parsetree = struct
         d_anno_back  = List.map ddatum_of_pdatum back;
       }
 
-  (* TODO: proper resugaring *)
   let rec pnode_of_dnode = function
     | DKeywordNode (k, v) ->
       PKeywordNode (pdatum_of_ddatum k, pdatum_of_ddatum v)
@@ -537,8 +536,30 @@ module Parsetree = struct
   and pdatum_of_ddatum : ddatum -> pdatum = function
     | DAtom a -> PAtom {elem = a; repr = `Direct}
     | DForm nodes ->
-      let nodes = List.map pnode_of_dnode nodes in
-      let elem = (nodes, SimpleForm, Infix) in
+      let form_type =
+        match List.hd nodes with
+        | DDatumNode (DAtom (CodifiedSymbolAtom `Toplevel)) ->
+          `Toplevel
+        | DDatumNode (DAtom (CodifiedSymbolAtom `List)) ->
+          `List
+        | DDatumNode (DAtom (CodifiedSymbolAtom `Map)) ->
+          `Map
+        | DDatumNode (DAtom (CodifiedSymbolAtom `Vector)) ->
+          failwith "VectorForm handling is not implemented yet!"
+        | _ -> `Regular
+      in
+      let nodes =
+        match form_type with
+        | `Regular -> List.map pnode_of_dnode nodes
+        | _ -> List.map pnode_of_dnode (List.tl nodes)
+      in (* List.map pnode_of_dnode nodes in *)
+      let elem =
+        match form_type with
+        | `Regular -> (nodes, SimpleForm, Infix)
+        | `Toplevel -> (nodes, ToplevelForm, Infix)
+        | `List -> (nodes, ListForm, Infix)
+        | `Map -> (nodes, MapForm, Infix)
+      in
       PForm {elem = elem; repr = `Direct}
     | DAnnotated { d_annotated  = ddat;
                    d_anno_front = dfront;

@@ -77,7 +77,7 @@ let%test "resugaring list form" =
   let pnode = PDatumNode (pdatum_atom (StringAtom "abc") `Direct) in
   let expect = pdatum_form [pnode] ListForm Infix `Direct in
   Format.(
-    (* if !output_debug then *)
+    if !output_debug then
       let ppd = pp_ddatum in
       let ppp = ParsetreePrinter.pp_pdatum in
       print_flush ();
