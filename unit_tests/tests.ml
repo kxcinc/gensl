@@ -189,7 +189,7 @@ let%test "eqv_cdatum disregards ordering" =
     if !output_debug then
       let ppc = pp_cdatum in
       print_flush ();
-      printf "cform 1: %a@.cform2: %a@."
+      printf "nform 1: %a@.nform2: %a@."
         ppc c1
         ppc c2
   );
@@ -210,7 +210,7 @@ let%test "eqv_ndatum disregards ordering" =
     if !output_debug then
       let ppn = pp_ndatum in
       print_flush ();
-      printf "cform 1: %a@.cform2: %a@."
+      printf "nform 1: %a@.nform2: %a@."
         ppn n1
         ppn n2
   );
@@ -248,8 +248,51 @@ let%test "eqv_ndatum disregards annotations (2)" =
     if !output_debug then
       let ppn = pp_ndatum in
       print_flush ();
-      printf "cform 1: %a@.cform2: %a@."
+      printf "nform 1: %a@.nform2: %a@."
         ppn n1
         ppn n2
+  );
+  res = expect
+
+let%test "eqv_ddatum disregards ordering and annotations (1)" =
+  let open Datatree in
+  let datom_string str = datom (StringAtom str) in
+  let k1 = datom_string "k1" in
+  let v1 = datom_string "v1" in
+  let k2 = datom_string "k2" in
+  let v2 = datom_string "v2" in
+  let ann1 = datom_string "foo" in
+  let ann2 = datom_string "bar" in
+  let d1 = dform [dkeywordnode k1 v1; dkeywordnode k2 v2; dannonode ann1] in
+  let d2 = dform [dkeywordnode k2 v2; dkeywordnode k1 v1; dannonode ann2] in
+  let res = eqv_ddatum d1 d2 in
+  let expect = true in
+  Format.(
+    if !output_debug then
+      let ppd = pp_ddatum in
+      print_flush ();
+      printf "dform 1: %a@.dform2: %a@."
+        ppd d1
+        ppd d2
+  );
+  res = expect
+
+let%test "eqv_ddatum disregards ordering and annotations (2)" =
+  let open Datatree in
+  let datom_string str = datom (StringAtom str) in
+  let s1 = datom_string "foo" in
+  let s2 = datom_string "bar" in
+  let s3 = datom_string "test" in
+  let d1 = s1 in
+  let d2 = dannotated s1 [s2] [s3] in
+  let res = eqv_ddatum d1 d2 in
+  let expect = true in
+  Format.(
+    if !output_debug then
+      let ppd = pp_ddatum in
+      print_flush ();
+      printf "dform 1: %a@.dform2: %a@."
+        ppd d1
+        ppd d2
   );
   res = expect
