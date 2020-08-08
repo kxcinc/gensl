@@ -168,8 +168,88 @@ let%test "nform -> dform ordering w/ three positional nodes" =
       let ppn = pp_ndatum in
       print_flush ();
       printf "nform: %a@.dform: %a@.expect: %a@."
-      ppn ndatum
-      ppd ddatum
-      ppd expect
+        ppn ndatum
+        ppd ddatum
+        ppd expect
   );
   ddatum = expect
+
+let%test "eqv_cdatum disregards ordering" =
+  let open Canonicaltree in
+  let catom_string str = catom (StringAtom str) in
+  let k1 = catom_string "k1" in
+  let v1 = catom_string "v1" in
+  let k2 = catom_string "k2" in
+  let v2 = catom_string "v2" in
+  let c1 = cform [(k1, v1); (k2, v2)] [] in
+  let c2 = cform [(k2, v2); (k1, v1)] [] in
+  let res = eqv_cdatum c1 c2 in
+  let expect = true in
+  Format.(
+    if !output_debug then
+      let ppc = pp_cdatum in
+      print_flush ();
+      printf "cform 1: %a@.cform2: %a@."
+        ppc c1
+        ppc c2
+  );
+  res = expect
+        
+let%test "eqv_ndatum disregards ordering" =
+  let open Normaltree in
+  let natom_string str = natom (StringAtom str) in
+  let k1 = natom_string "k1" in
+  let v1 = natom_string "v1" in
+  let k2 = natom_string "k2" in
+  let v2 = natom_string "v2" in
+  let n1 = nform [(k1, v1); (k2, v2)] [] [] in
+  let n2 = nform [(k2, v2); (k1, v1)] [] [] in
+  let res = eq_ndatum n1 n2 in
+  let expect = true in
+  Format.(
+    if !output_debug then
+      let ppn = pp_ndatum in
+      print_flush ();
+      printf "cform 1: %a@.cform2: %a@."
+        ppn n1
+        ppn n2
+  );
+  res = expect
+
+let%test "eqv_ndatum disregards annotations (1)" =
+  let open Normaltree in
+  let natom_string str = natom (StringAtom str) in
+  let s1 = natom_string "foo" in
+  let a1 = natom_string "bar" in
+  let n1 = nform [] [s1] [a1] in
+  let n2 = nform [] [s1] [] in
+  let res = eq_ndatum n1 n2 in
+  let expect = true in
+  Format.(
+    if !output_debug then
+      let ppn = pp_ndatum in
+      print_flush ();
+      printf "cform 1: %a@.cform2: %a@."
+        ppn n1
+        ppn n2
+  );
+  res = expect
+
+let%test "eqv_ndatum disregards annotations (2)" =
+  let open Normaltree in
+  let natom_string str = natom (StringAtom str) in
+  let s1 = natom_string "foo" in
+  let s2 = natom_string "bar" in
+  let n1 = s1 in
+  let n2 = nannotated s1 [s2] in
+  let res = eq_ndatum n1 n2 in
+  let expect = true in
+  Format.(
+    if !output_debug then
+      let ppn = pp_ndatum in
+      print_flush ();
+      printf "cform 1: %a@.cform2: %a@."
+        ppn n1
+        ppn n2
+  );
+  res = expect

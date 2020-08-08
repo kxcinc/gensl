@@ -239,7 +239,7 @@ module Normaltree = struct
              cpos = List.map cdatum_of_ndatum nposes}
     | NAnnotated (ndat, _annos) -> cdatum_of_ndatum ndat
         
-  and eq_ndatum : ndatum equality = fun a b -> (cdatum_of_ndatum a) = (cdatum_of_ndatum b)
+  and eq_ndatum : ndatum equality = fun a b -> eqv_cdatum (cdatum_of_ndatum a) (cdatum_of_ndatum b)
   let natom atom = NAtom atom
   let nform : (ndatum*ndatum) list -> ndatum list -> ndatum list -> ndatum =
     fun keywordeds positionals annotations ->
