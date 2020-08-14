@@ -149,8 +149,9 @@ let%test "resugaring set form" =
   let pdatum = pdatum_of_ddatum ddatum in
   let pdatum1 = pdatum_atom (StringAtom "abc") `Direct in
   let pdatum2 = pdatum_atom (StringAtom "def") `Direct in
-  let pnode = PKeywordNode (pdatum1, pdatum2) in
-  let expect = pdatum_form [pnode] MapForm Infix `Direct in
+  let pnode1 = PDatumNode pdatum1 in
+  let pnode2 = PAnnoNode pdatum2 in
+  let expect = pdatum_form [pnode1; pnode2] SetForm Infix `Direct in
   Format.(
     (* if !output_debug then *)
       let ppd = pp_ddatum in
