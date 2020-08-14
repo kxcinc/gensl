@@ -153,7 +153,7 @@ let%test "resugaring set form" =
   let pnode2 = PAnnoNode pdatum2 in
   let expect = pdatum_form [pnode1; pnode2] SetForm Infix `Direct in
   Format.(
-    (* if !output_debug then *)
+    if !output_debug then
       let ppd = pp_ddatum in
       let ppp = ParsetreePrinter.pp_pdatum in
       print_flush ();
