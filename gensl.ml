@@ -537,16 +537,16 @@ module Parsetree = struct
     | DAtom a -> PAtom {elem = a; repr = `Direct}
     | DForm nodes ->
       let form_type =
-        match List.hd nodes with
-        | DDatumNode (DAtom (CodifiedSymbolAtom `Toplevel)) ->
+        match nodes with
+        | (DDatumNode (DAtom (CodifiedSymbolAtom `Toplevel)) :: _) ->
           `Toplevel
-        | DDatumNode (DAtom (CodifiedSymbolAtom `List)) ->
+        | (DDatumNode (DAtom (CodifiedSymbolAtom `List)) :: _) ->
           `List
-        | DDatumNode (DAtom (CodifiedSymbolAtom `Map)) ->
+        | (DDatumNode (DAtom (CodifiedSymbolAtom `Map)) :: _) ->
           `Map
-        | DDatumNode (DAtom (CodifiedSymbolAtom `Vector)) ->
+        | (DDatumNode (DAtom (CodifiedSymbolAtom `Vector)) :: _) ->
           failwith "VectorForm handling is not implemented yet!"
-        | DDatumNode (DAtom (CodifiedSymbolAtom `Set)) ->
+        | (DDatumNode (DAtom (CodifiedSymbolAtom `Set)) :: _) ->
           `Set
         | _ -> `Regular
       in
