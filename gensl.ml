@@ -546,11 +546,25 @@ module Parsetree = struct
           `Map
         | DDatumNode (DAtom (CodifiedSymbolAtom `Vector)) ->
           failwith "VectorForm handling is not implemented yet!"
+        | DDatumNode (DAtom (CodifiedSymbolAtom `Set)) ->
+          `Set
         | _ -> `Regular
       in
       let nodes =
         match form_type with
         | `Regular -> List.map pnode_of_dnode nodes
+        | `Set ->
+          begin
+            let resugar_dnode n =
+              match n with
+              | DKeywordNode (dat, DAtom (BoolAtom true)) ->
+                PDatumNode (pdatum_of_ddatum dat)
+              | DKeywordNode (_, _) -> failwith "Invalid node while trying to resugar SetForm!"
+              | DAnnoNode _ -> pnode_of_dnode n
+              | _ -> failwith "Invalid node while trying to resugar SetForm!"
+            in
+            List.map resugar_dnode (List.tl nodes)
+          end
         | _ -> List.map pnode_of_dnode (List.tl nodes)
       in (* List.map pnode_of_dnode nodes in *)
       let elem =
@@ -559,6 +573,7 @@ module Parsetree = struct
         | `Toplevel -> (nodes, ToplevelForm, Infix)
         | `List -> (nodes, ListForm, Infix)
         | `Map -> (nodes, MapForm, Infix)
+        | `Set -> (nodes, SetForm, Infix)
       in
       PForm {elem = elem; repr = `Direct}
     | DAnnotated { d_annotated  = ddat;

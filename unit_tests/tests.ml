@@ -68,6 +68,56 @@ let%test "desugaring list form" =
   );
   ddat = expect
 
+let%test "desugaring set form" =
+  let open Datatree in
+  let open Parsetree in
+  let pdatum1 = pdatum_atom (StringAtom "abc") `Direct in
+  let pdatum2 = pdatum_atom (StringAtom "def") `Direct in
+  let pnode1 = PDatumNode pdatum1 in
+  let pnode2 = PAnnoNode pdatum2 in
+  let pform = pdatum_form [pnode1; pnode2] SetForm Infix `Direct in
+  let ddat = ddatum_of_pdatum pform in
+  let expect = dform [ddatumnode (datom (CodifiedSymbolAtom `Set));
+                      dkeywordnode (ddatum_of_pdatum pdatum1)
+                        (DAtom (BoolAtom true));
+                      dannonode (ddatum_of_pdatum pdatum2)
+                     ] in
+  Format.(
+    if !output_debug then
+      let ppd = pp_ddatum in
+      let ppp = ParsetreePrinter.pp_pdatum in
+      print_flush ();
+      printf "pform: %a@.dform: %a@.expect: %a@."
+        ppp pform
+        ppd ddat
+        ppd expect
+  );
+  ddat = expect
+
+let%test "desugaring map form" =
+  let open Datatree in
+  let open Parsetree in
+  let pdatum1 = pdatum_atom (StringAtom "abc") `Direct in
+  let pdatum2 = pdatum_atom (StringAtom "def") `Direct in
+  let pnode = PKeywordNode (pdatum1, pdatum2) in
+  let pform = pdatum_form [pnode] MapForm Infix `Direct in
+  let ddat = ddatum_of_pdatum pform in
+  let expect = dform [ddatumnode (datom (CodifiedSymbolAtom `Map));
+                      dkeywordnode (ddatum_of_pdatum pdatum1)
+                        (ddatum_of_pdatum pdatum2)
+                     ] in
+  Format.(
+    if !output_debug then
+      let ppd = pp_ddatum in
+      let ppp = ParsetreePrinter.pp_pdatum in
+      print_flush ();
+      printf "pform: %a@.dform: %a@.expect: %a@."
+        ppp pform
+        ppd ddat
+        ppd expect
+  );
+  ddat = expect
+
 let%test "resugaring list form" =
   let open Datatree in 
   let open Parsetree in
@@ -76,6 +126,55 @@ let%test "resugaring list form" =
   let pdatum = pdatum_of_ddatum ddatum in
   let pnode = PDatumNode (pdatum_atom (StringAtom "abc") `Direct) in
   let expect = pdatum_form [pnode] ListForm Infix `Direct in
+  Format.(
+    if !output_debug then
+      let ppd = pp_ddatum in
+      let ppp = ParsetreePrinter.pp_pdatum in
+      print_flush ();
+      printf "dform: %a@.pform: %a@.expect: %a@."
+        ppd ddatum
+        ppp pdatum
+        ppp expect
+  );
+  pdatum = expect
+
+let%test "resugaring set form" =
+  let open Datatree in 
+  let open Parsetree in
+  let ddatum = dform [ddatumnode (datom (CodifiedSymbolAtom `Set));
+                      dkeywordnode (datom (StringAtom "abc"))
+                        (DAtom (BoolAtom true));
+                      dannonode (datom (StringAtom "def"))
+                     ] in
+  let pdatum = pdatum_of_ddatum ddatum in
+  let pdatum1 = pdatum_atom (StringAtom "abc") `Direct in
+  let pdatum2 = pdatum_atom (StringAtom "def") `Direct in
+  let pnode = PKeywordNode (pdatum1, pdatum2) in
+  let expect = pdatum_form [pnode] MapForm Infix `Direct in
+  Format.(
+    (* if !output_debug then *)
+      let ppd = pp_ddatum in
+      let ppp = ParsetreePrinter.pp_pdatum in
+      print_flush ();
+      printf "dform: %a@.pform: %a@.expect: %a@."
+        ppd ddatum
+        ppp pdatum
+        ppp expect
+  );
+  pdatum = expect
+
+let%test "resugaring map form" =
+  let open Datatree in 
+  let open Parsetree in
+  let ddatum = dform [ddatumnode (datom (CodifiedSymbolAtom `Map));
+                      dkeywordnode (datom (StringAtom "abc"))
+                        (datom (StringAtom "def"))
+                     ] in
+  let pdatum = pdatum_of_ddatum ddatum in
+  let pdatum1 = pdatum_atom (StringAtom "abc") `Direct in
+  let pdatum2 = pdatum_atom (StringAtom "def") `Direct in
+  let pnode = PKeywordNode (pdatum1, pdatum2) in
+  let expect = pdatum_form [pnode] MapForm Infix `Direct in
   Format.(
     if !output_debug then
       let ppd = pp_ddatum in
