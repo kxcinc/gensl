@@ -249,7 +249,7 @@ module Normaltree = struct
   let nannotated : ndatum -> ndatum list -> ndatum =
     fun annotated annotations ->
     NAnnotated (annotated, annotations)
-
+      
   let rec ndatum_of_cdatum : cdatum -> ndatum = function
     | CAtom a -> NAtom a
     | CForm {ckwd = ckws; cpos = cposes} ->
@@ -320,8 +320,14 @@ module Datatree = struct
     | DAnnotated {d_annotated = dat;
                   d_anno_front = front_anns;
                   d_anno_back = back_anns} ->
-      let front = List.map ndatum_of_ddatum front_anns in
-      let back  = List.map ndatum_of_ddatum back_anns  in
+      let front = List.map ndatum_of_ddatum front_anns
+                  |> (List.sort @@ fun d1 d2 ->
+                      let tr = cdatum_of_ndatum in
+                      Canonicaltree.cdatum_ordering (tr d1) (tr d2)) in
+      let back  = List.map ndatum_of_ddatum back_anns
+                  |> (List.sort @@ fun d1 d2 ->
+                      let tr = cdatum_of_ndatum in
+                      Canonicaltree.cdatum_ordering (tr d1) (tr d2)) in
       (* XXX sort the annotations *)
       NAnnotated (ndatum_of_ddatum dat, front @ back)
 

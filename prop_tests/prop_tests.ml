@@ -119,7 +119,7 @@ let () =
   let open TreeGen in
   let prop cdatum =
     check_eq (cdatum_of_ndatum (ndatum_of_cdatum cdatum)) cdatum in
-  add_test ~name:"cdatum_to_ndatum \\o ndatum_of_cdatum is id"
+  add_test ~name:"cdatum_of_ndatum \\o ndatum_of_cdatum is id"
     [cdatum]
     prop
 
@@ -139,7 +139,7 @@ let () =
           pp_ndatum ndatum';
       end;
     check_eq (ndatum_of_ddatum (ddatum_of_ndatum ndatum)) ndatum in
-  add_test ~name:"ndatum_to_ddatum \\o ddatum_of_ndatum is id"
+  add_test ~name:"ndatum_of_ddatum \\o ddatum_of_ndatum is id"
     [ndatum]
     prop *)
 
