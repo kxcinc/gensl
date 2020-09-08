@@ -41,6 +41,7 @@ module BasetypesGen = struct
   let atom_bool = (fun x -> BoolAtom x) <$> bool
   let atom = oneof [ atom_symb; atom_csymb; atom_string; atom_bytes;
                      atom_numeric; atom_bool ]
+  let trivial_atom = pure (SymbolAtom "atom")
 end
 
 module TreeGen = struct
@@ -59,15 +60,15 @@ module TreeGen = struct
   (* fix with no i.e. trivial parameter *)
   let fix1 (f: 'a t -> 'a t): 'a t = fix (fun f () -> f ()) ()
   
-  let cdatum_gen = sized_size small_nat @@ fix (fun self n ->
+  let cdatum_gen = sized @@ fix (fun self n ->
       match n with
-      | 0 -> (fun x -> CAtom x) <$> atom;
+      | 0 | 1 -> (fun x -> CAtom x) <$> atom;
       | _ ->
-        frequency [
-          1, (fun x -> CAtom x) <$> atom;
-          2, map2 (fun ckwd cpos -> CForm { ckwd; cpos })
-            (list @@ pair (self (n/20)) (self (n/20)))
-            (list @@ self (n/10))])
+         (1 -- (max 1 (n/6))) >>= fun factor1 -> 
+         (1 -- (max 1 (n/6))) >>= fun factor2 -> 
+         map2 (fun ckwd cpos -> CForm { ckwd; cpos })
+           (list_size (pure (n/factor1*2/9)) @@ pair (self factor1) (self factor1))
+           (list_size (pure (n/factor2*7/9)) @@ self (factor2)))
 
   let cdatum_printer cdatum =
     let open Canonicaltree in
@@ -86,21 +87,21 @@ module TreeGen = struct
       }
     | NAnnotated of ndatum * ndatum set
 
-  let ndatum_gen = sized_size small_nat @@ fix (fun self n ->
-      frequency [
-        1, (fun x -> NAtom x) <$> atom;
-        3, map3
+  let ndatum_gen = sized @@ fix (fun self n ->
+      match n with
+      | 0 | 1 -> (fun x -> NAtom x) <$> atom
+      | _ ->
+         let fsize = (max 1 (n/6)) in
+         (1 -- fsize) >>= fun fac1 -> 
+         (1 -- fsize) >>= fun fac2 -> 
+         (1 -- fsize) >>= fun fac3 ->
+         map3
           (fun nkwd npos nann -> NForm { n_keywordeds  = nkwd ;
                                          n_positionals = npos ;
                                          n_annotations = nann })
-          (list (pair (self (n/30)) (self (n/30))))
-          (list (self (n/15)))
-          (list (self (n/15)));
-        2, map2
-          (fun dat ann -> NAnnotated (dat, ann))
-          (self (n/10))
-          (list (self (n/20)))
-      ])
+          (list_size (pure (n/fac1*2/9)) @@ pair (self fac1) (self fac1))
+          (list_size (pure (n/fac2*5/9)) @@ self (fac2))
+          (list_size (pure (n/fac3*2/9)) @@ self (fac3)))
 
   let ndatum_printer ndatum =
     let open Normaltree in
@@ -111,11 +112,21 @@ module TreeGen = struct
   let ndatum = make ~print:ndatum_printer ndatum_gen
 end
 
+let rec size_of_cdatum = Canonicaltree.(
+    function
+    | CAtom _ -> 1
+    | CForm {ckwd; cpos} ->
+       let count datums =
+         datums |&> size_of_cdatum
+         |> List.foldl (+) 0 in
+       let ckwd = List.fmap (fun (a,b) -> [a; b]) ckwd in
+       count ckwd + count cpos + 1)
+
 let test_cdatum_ndatum =
   let open Normaltree in
   let open TreeGen in
   QCheck.(Test.make ~name:"cdatum_of_ndatum \\o ndatum_of_cdatum is id"
-            ~count:20
+            ~count:100
             cdatum
             (fun cdatum -> (cdatum_of_ndatum (ndatum_of_cdatum cdatum)) = cdatum))
 
@@ -123,16 +134,16 @@ let test_ndatum_ddatum =
   let open Datatree in
   let open TreeGen in
   QCheck.(Test.make ~name:"ndatum_of_ddatum \\o ddatum_of_ndatum is id"
-            ~count:20
+            ~count:100
             ndatum
             (fun ndatum -> (ndatum_of_ddatum (ddatum_of_ndatum ndatum)) = ndatum))
 
-let () = ignore (|&>)
-
 let () =
-  QCheck_runner.run_tests_main
+  let open QCheck_runner in
+  set_seed 80837877;
+  run_tests_main
     ~n:20
     [ test_id;
       test_cdatum_ndatum;
-      test_ndatum_ddatum
+      test_ndatum_ddatum;
     ]
