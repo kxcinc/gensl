@@ -39,9 +39,31 @@ module BasetypesGen = struct
     let f num suffix = NumericAtom (string_of_int num, suffix) in
     map2 f int (oneof [pure ""; ident])
   let atom_bool = (fun x -> BoolAtom x) <$> bool
+                  
   let atom = oneof [ atom_symb; atom_csymb; atom_string; atom_bytes;
                      atom_numeric; atom_bool ]
   let trivial_atom = pure (SymbolAtom "atom")
+
+  type atom = Basetypes.atom =
+    | SymbolAtom of string
+    | CodifiedSymbolAtom of csymb
+    | StringAtom of string
+    | BytesAtom of bytes
+    | NumericAtom of string*string (** [numeric, suffix] *)
+    | BoolAtom of bool
+
+  let atom_shrink (a: atom) (yield: atom -> unit) =
+    let open Shrink in
+    match a with
+    | SymbolAtom s -> yield (SymbolAtom "") (* string s @@ fun s' -> yield (SymbolAtom s) *)
+    | CodifiedSymbolAtom _ -> ()
+    | StringAtom s -> yield (StringAtom "") (* string s @@ fun s' -> yield (StringAtom s) *)
+    | BytesAtom b -> yield (BytesAtom Bytes.empty) (* string (Bytes.unsafe_to_string b) @@ fun b' -> yield (BytesAtom (Bytes.of_string b')) *)
+    | NumericAtom (n, a) -> yield (NumericAtom ("0", "")) (*(pair nil string) (n, a) @@ fun (n', a') -> yield (NumericAtom (n', a'))*)
+    | BoolAtom _ -> ()
+
+  let (_: atom Shrink.t) = atom_shrink
+  
 end
 
 module TreeGen = struct
@@ -76,7 +98,15 @@ module TreeGen = struct
     fprintf str_formatter "%a" pp_cdatum cdatum;
     flush_str_formatter ()
 
-  let cdatum = make ~print:cdatum_printer cdatum_gen
+  let cdatum_shrink (cdatum: cdatum) (yield: cdatum -> unit) =
+    let open Shrink in
+    match cdatum with
+    | CAtom a -> atom_shrink a @@ fun a' -> yield (CAtom a')
+    | _ -> ()
+
+  let (_: cdatum Shrink.t) = cdatum_shrink
+  
+  let cdatum = make ~print:cdatum_printer ~shrink:cdatum_shrink cdatum_gen
       
   type ndatum = Gensl.Normaltree.ndatum =
     | NAtom of atom
@@ -107,9 +137,27 @@ module TreeGen = struct
     let open Normaltree in
     let open Format in
     fprintf str_formatter "%a" pp_ndatum ndatum;
-     flush_str_formatter ()
+    flush_str_formatter ()
 
-  let ndatum = make ~print:ndatum_printer ndatum_gen
+  let rec ndatum_shrink (ndatum: ndatum) (yield: ndatum -> unit) =
+    let open Shrink in
+    match ndatum with
+    | NAtom a -> atom_shrink a @@ fun a' -> yield (NAtom a')
+    | NAnnotated (dat, anns) ->
+      (pair ndatum_shrink (list ~shrink:ndatum_shrink)) (dat, anns) @@
+      fun (dat', anns') -> yield (NAnnotated (dat', anns'))
+    | NForm { n_keywordeds; n_positionals; n_annotations } ->
+      let shrink_kw: (ndatum * ndatum) Shrink.t = pair ndatum_shrink ndatum_shrink in
+      (triple list list (list ~shrink:ndatum_shrink))
+      (*(triple (list ~shrink:shrink_kw) (list ~shrink:ndatum_shrink) (list ~shrink:ndatum_shrink))*)
+        (n_keywordeds, n_positionals, n_annotations) @@
+      (fun (kws', poses', anns') -> yield (NForm { n_keywordeds  = kws';
+                                                   n_positionals = poses';
+                                                   n_annotations = anns' }))
+
+  let (_: ndatum Shrink.t) = ndatum_shrink
+
+  let ndatum = make ~print:ndatum_printer ~shrink:ndatum_shrink ndatum_gen
 end
 
 let rec size_of_cdatum = Canonicaltree.(
@@ -140,7 +188,7 @@ let test_ndatum_ddatum =
 
 let () =
   let open QCheck_runner in
-  set_seed 80837877;
+  (* set_seed 80837877; *)
   run_tests_main
     ~n:20
     [ test_id;
