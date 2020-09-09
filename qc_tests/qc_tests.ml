@@ -55,11 +55,11 @@ module BasetypesGen = struct
   let atom_shrink (a: atom) (yield: atom -> unit) =
     let open Shrink in
     match a with
-    | SymbolAtom s -> yield (SymbolAtom "") (* string s @@ fun s' -> yield (SymbolAtom s) *)
+    | SymbolAtom s -> string s @@ fun s' -> yield (SymbolAtom s)
     | CodifiedSymbolAtom _ -> ()
-    | StringAtom s -> yield (StringAtom "") (* string s @@ fun s' -> yield (StringAtom s) *)
-    | BytesAtom b -> yield (BytesAtom Bytes.empty) (* string (Bytes.unsafe_to_string b) @@ fun b' -> yield (BytesAtom (Bytes.of_string b')) *)
-    | NumericAtom (n, a) -> yield (NumericAtom ("0", "")) (*(pair nil string) (n, a) @@ fun (n', a') -> yield (NumericAtom (n', a'))*)
+    | StringAtom s ->string s @@ fun s' -> yield (StringAtom s)
+    | BytesAtom b -> ()
+    | NumericAtom (n, a) -> (pair int string) (int_of_string n, a) @@ fun (n', a') -> yield (NumericAtom (string_of_int n', a'))
     | BoolAtom _ -> ()
 
   let (_: atom Shrink.t) = atom_shrink
@@ -98,11 +98,14 @@ module TreeGen = struct
     fprintf str_formatter "%a" pp_cdatum cdatum;
     flush_str_formatter ()
 
-  let cdatum_shrink (cdatum: cdatum) (yield: cdatum -> unit) =
+  let rec cdatum_shrink (cdatum: cdatum) (yield: cdatum -> unit) =
     let open Shrink in
     match cdatum with
     | CAtom a -> atom_shrink a @@ fun a' -> yield (CAtom a')
-    | _ -> ()
+    | CForm { ckwd; cpos } ->
+      (pair (list ~shrink:(pair cdatum_shrink cdatum_shrink)) (list ~shrink:cdatum_shrink))
+        (ckwd, cpos) @@ 
+        (fun (ckwd', cpos') -> yield (CForm { ckwd = ckwd'; cpos = cpos' }))
 
   let (_: cdatum Shrink.t) = cdatum_shrink
   
@@ -148,8 +151,8 @@ module TreeGen = struct
       fun (dat', anns') -> yield (NAnnotated (dat', anns'))
     | NForm { n_keywordeds; n_positionals; n_annotations } ->
       let shrink_kw: (ndatum * ndatum) Shrink.t = pair ndatum_shrink ndatum_shrink in
-      (triple list list (list ~shrink:ndatum_shrink))
-      (*(triple (list ~shrink:shrink_kw) (list ~shrink:ndatum_shrink) (list ~shrink:ndatum_shrink))*)
+      (* CAUTION: can be very, very slow! *)
+      (triple (list ~shrink:shrink_kw) (list ~shrink:ndatum_shrink) (list ~shrink:ndatum_shrink))
         (n_keywordeds, n_positionals, n_annotations) @@
       (fun (kws', poses', anns') -> yield (NForm { n_keywordeds  = kws';
                                                    n_positionals = poses';
@@ -178,6 +181,7 @@ let test_cdatum_ndatum =
             cdatum
             (fun cdatum -> (cdatum_of_ndatum (ndatum_of_cdatum cdatum)) = cdatum))
 
+(* minimum failing case: ((anno (bytes:)) (anno ())) *)
 let test_ndatum_ddatum =
   let open Datatree in
   let open TreeGen in
