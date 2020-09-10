@@ -308,26 +308,26 @@ module Datatree = struct
         end
       in
       let (kws, posses, anns) = List.fold_left f ([], [], []) dnodes in
-      let kws = kws |> List.sort @@ fun (k1,_) (k2,_) ->
+      let kws = kws (*|> List.sort @@ fun (k1,_) (k2,_) ->
                                     let tr = cdatum_of_ndatum in
-                                    Canonicaltree.cdatum_ordering (tr k1) (tr k2) in
-      let anns = anns |> List.sort @@ fun d1 d2 ->
+                                    Canonicaltree.cdatum_ordering (tr k1) (tr k2)*) in
+      let anns = anns (*|> List.sort @@ fun d1 d2 ->
                                     let tr = cdatum_of_ndatum in
-                                    Canonicaltree.cdatum_ordering (tr d1) (tr d2) in
-      NForm {n_keywordeds = kws;
-             n_positionals = posses;
-             n_annotations = anns}
+                                    Canonicaltree.cdatum_ordering (tr d1) (tr d2)*) in
+      NForm {n_keywordeds = List.rev kws;
+             n_positionals = List.rev posses;
+             n_annotations = List.rev anns}
     | DAnnotated {d_annotated = dat;
                   d_anno_front = front_anns;
                   d_anno_back = back_anns} ->
       let front = List.map ndatum_of_ddatum front_anns
-                  |> (List.sort @@ fun d1 d2 ->
+                  (*|> (List.sort @@ fun d1 d2 ->
                       let tr = cdatum_of_ndatum in
-                      Canonicaltree.cdatum_ordering (tr d1) (tr d2)) in
+                      Canonicaltree.cdatum_ordering (tr d1) (tr d2))*) in
       let back  = List.map ndatum_of_ddatum back_anns
-                  |> (List.sort @@ fun d1 d2 ->
+                  (*|> (List.sort @@ fun d1 d2 ->
                       let tr = cdatum_of_ndatum in
-                      Canonicaltree.cdatum_ordering (tr d1) (tr d2)) in
+                      Canonicaltree.cdatum_ordering (tr d1) (tr d2))*) in
       (* XXX sort the annotations *)
       NAnnotated (ndatum_of_ddatum dat, front @ back)
 

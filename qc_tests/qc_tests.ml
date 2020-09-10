@@ -57,8 +57,8 @@ module BasetypesGen = struct
     match a with
     | SymbolAtom s -> string s @@ fun s' -> yield (SymbolAtom s)
     | CodifiedSymbolAtom _ -> ()
-    | StringAtom s ->string s @@ fun s' -> yield (StringAtom s)
-    | BytesAtom b -> ()
+    | StringAtom s -> string s @@ fun s' -> yield (StringAtom s)
+    | BytesAtom b -> string (Bytes.to_string b) @@ fun s' -> yield (BytesAtom (Bytes.unsafe_of_string s'))
     | NumericAtom (n, a) -> (pair int string) (int_of_string n, a) @@ fun (n', a') -> yield (NumericAtom (string_of_int n', a'))
     | BoolAtom _ -> ()
 
@@ -161,6 +161,19 @@ module TreeGen = struct
   let (_: ndatum Shrink.t) = ndatum_shrink
 
   let ndatum = make ~print:ndatum_printer ~shrink:ndatum_shrink ndatum_gen
+
+  type ddatum = Gensl.Datatree.ddatum =
+    | DAtom of atom (* an atom *)
+    | DForm of dnode list (* a form is represented as a list of nodes *)
+    | DAnnotated of {
+        d_annotated : ddatum;
+        d_anno_front : ddatum list;
+        d_anno_back : ddatum list;
+      }
+  and  dnode = Gensl.Datatree.dnode =
+    | DKeywordNode of ddatum * ddatum
+    | DDatumNode of ddatum
+    | DAnnoNode of ddatum
 end
 
 let rec size_of_cdatum = Canonicaltree.(
@@ -190,6 +203,47 @@ let test_ndatum_ddatum =
             ndatum
             (fun ndatum -> (ndatum_of_ddatum (ddatum_of_ndatum ndatum)) = ndatum))
 
+let test_cdatum_ordering =
+  let open Canonicaltree in
+  let open TreeGen in
+  let open QCheck in
+  let (<<=) a b = cdatum_ordering a b <= 0 in
+  let antisymmetric a b =
+    (a <<= b && b <<= a) ==> (a = b) in
+  let transitive a b c =
+    (a <<= b && b <<= c) ==> (a <<= c) in
+  Test.make ~name:"cdatum_ordering looks like a linear order"
+    ~count:100
+    (quad cdatum cdatum cdatum bool)
+    (fun (a, b, c, switch) ->
+       (if switch then
+         (antisymmetric a b && antisymmetric b c && antisymmetric a c)
+        else antisymmetric a a) &&
+       (if a <<= b
+        then transitive a b c
+        else transitive b a c))
+
+(* let () =
+  let open Basetypes in 
+  let open Normaltree in
+  let open Datatree in
+  let print ndatum =
+    Format.printf "Before:\n%a\n\nAfter:%a\n" pp_ndatum ndatum
+      pp_ndatum (ndatum_of_ddatum (ddatum_of_ndatum ndatum)) in
+  List.iter print
+    [ NForm { n_keywordeds = [];
+              n_positionals = [NAtom (BoolAtom true);
+                               NAtom (CodifiedSymbolAtom `Uuid)];
+              n_annotations = [] } ;
+      NForm { n_keywordeds  = [];
+              n_positionals = [];
+              n_annotations = [ NForm {n_keywordeds = [];
+                                       n_positionals = [NAtom (BytesAtom Bytes.empty)];
+                                       n_annotations = []} ;
+                                NForm {n_keywordeds = [];
+                                       n_positionals = [];
+                                       n_annotations = []} ]} ] *)
+    
 let () =
   let open QCheck_runner in
   (* set_seed 80837877; *)
@@ -198,4 +252,5 @@ let () =
     [ test_id;
       test_cdatum_ndatum;
       test_ndatum_ddatum;
+      test_cdatum_ordering
     ]
