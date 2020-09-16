@@ -233,30 +233,8 @@ let test_cdatum_ordering =
         then unless (transitive a b c) "trans a b c"
         else unless (transitive b a c) "trans b a c"))
 
-(* let () =
-  let open Basetypes in 
-  let open Normaltree in
-  let open Datatree in
-  let print ndatum =
-    Format.printf "Before:\n%a\n\nAfter:%a\n" pp_ndatum ndatum
-      pp_ndatum (ndatum_of_ddatum (ddatum_of_ndatum ndatum)) in
-  List.iter print
-    [ NForm { n_keywordeds = [];
-              n_positionals = [NAtom (BoolAtom true);
-                               NAtom (CodifiedSymbolAtom `Uuid)];
-              n_annotations = [] } ;
-      NForm { n_keywordeds  = [];
-              n_positionals = [];
-              n_annotations = [ NForm {n_keywordeds = [];
-                                       n_positionals = [NAtom (BytesAtom Bytes.empty)];
-                                       n_annotations = []} ;
-                                NForm {n_keywordeds = [];
-                                       n_positionals = [];
-                                       n_annotations = []} ]} ] *)
-    
 let () =
   let open QCheck_runner in
-  (* set_seed 80837877; *)
   run_tests_main
     ~n:20
     [
