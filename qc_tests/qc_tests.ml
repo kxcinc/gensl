@@ -208,20 +208,30 @@ let test_cdatum_ordering =
   let open TreeGen in
   let open QCheck in
   let (<<=) a b = cdatum_ordering a b <= 0 in
-  let antisymmetric a b =
-    (a <<= b && b <<= a) ==> (a = b) in
+  let unless b msg = if not b then Test.fail_report msg else true in
+  let antisymmetric ?case a b =
+    let res =
+      (a <<= b && b <<= a) ==> (a = b) in
+    unless res Format.(
+      sprintf "antisymm (%s) %d %d"
+        (Option.value ~default:"nocase" case)
+        (cdatum_ordering a b)
+        (cdatum_ordering b a)) in
   let transitive a b c =
     (a <<= b && b <<= c) ==> (a <<= c) in
   Test.make ~name:"cdatum_ordering looks like a linear order"
     ~count:100
     (quad cdatum cdatum cdatum bool)
     (fun (a, b, c, switch) ->
-       (if switch then
-         (antisymmetric a b && antisymmetric b c && antisymmetric a c)
-        else antisymmetric a a) &&
+      (if switch then begin
+              antisymmetric ~case:"a b" a b
+           && antisymmetric ~case:"b c" b c
+           && antisymmetric ~case:"a c" a c
+         end
+        else unless (antisymmetric a a) "antisymm a a") &&
        (if a <<= b
-        then transitive a b c
-        else transitive b a c))
+        then unless (transitive a b c) "trans a b c"
+        else unless (transitive b a c) "trans b a c"))
 
 (* let () =
   let open Basetypes in 
@@ -249,8 +259,9 @@ let () =
   (* set_seed 80837877; *)
   run_tests_main
     ~n:20
-    [ test_id;
+    [
+      test_id;
+      test_cdatum_ordering;
       test_cdatum_ndatum;
       test_ndatum_ddatum;
-      test_cdatum_ordering
     ]
