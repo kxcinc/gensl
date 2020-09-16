@@ -158,40 +158,42 @@ module Canonicaltree = struct
       }
 
   (** !!this is to serve as the specification of atom ordering *)
-  let rec cdatum_ordering : cdatum -> cdatum -> int = fun x y ->
-    (* CAtom < CForm *)
-    match x, y with
-    | CAtom a1, CAtom a2 -> compare_atom a1 a2
-    | CAtom _, CForm _ -> -1
-    | CForm _, CAtom _ -> 1
-    | CForm { ckwd = (ckwd1,_); cpos = cpos1 },
-      CForm { ckwd = (ckwd2,_); cpos = cpos2 } ->
-       let open struct
-             type node = Kw of cdatum*cdatum | Pos of cdatum
-             let mkkw (k,v) = Kw (k,v) and mkpos x = Pos x
-           end in
-       let compare_kw (k1,_) (k2,_) = cdatum_ordering k1 k2 in
-       let compare_node n1 n2 = match n1, n2 with
-         (* Kw < Pos *)
-         | Kw _, Pos _ -> -1
-         | Pos _, Kw _ -> 1
-         | Kw (k1,v1), Kw (k2,v2) -> compare_kw (k1,v1) (k2,v2)
-         | Pos d1, Pos d2 -> cdatum_ordering d1 d2 in
-       (* XXX maybe we should throw when either ckwd has duplications *)
-       let (ckwd1, ckwd2) =
-         let sort = List.sort_uniq compare_kw
-         in sort ckwd1, sort ckwd2 in
-       let combine kwd pos =
-         let kwd = kwd |&> mkkw and pos = pos |&> mkpos in
-         match pos with
-         | head :: tail -> head :: kwd @ tail
-         | [] -> pos in
-       let compare = function
-         | [], [] -> 0
-         | _, [] -> 1
-         | [], _ -> -1
-         | h1::_, h2::_ -> compare_node h1 h2 in
-       compare (combine ckwd1 cpos1, combine ckwd2 cpos2)
+  (* let rec cdatum_ordering : cdatum -> cdatum -> int = fun x y ->
+   *   (\* CAtom < CForm *\)
+   *   match x, y with
+   *   | CAtom a1, CAtom a2 -> compare_atom a1 a2
+   *   | CAtom _, CForm _ -> -1
+   *   | CForm _, CAtom _ -> 1
+   *   | CForm { ckwd = (ckwd1,_); cpos = cpos1 },
+   *     CForm { ckwd = (ckwd2,_); cpos = cpos2 } ->
+   *      let open struct
+   *            type node = Kw of cdatum*cdatum | Pos of cdatum
+   *            let mkkw (k,v) = Kw (k,v) and mkpos x = Pos x
+   *          end in
+   *      let compare_kw (k1,_) (k2,_) = cdatum_ordering k1 k2 in
+   *      let compare_node n1 n2 = match n1, n2 with
+   *        (\* Kw < Pos *\)
+   *        | Kw _, Pos _ -> -1
+   *        | Pos _, Kw _ -> 1
+   *        | Kw (k1,v1), Kw (k2,v2) -> compare_kw (k1,v1) (k2,v2)
+   *        | Pos d1, Pos d2 -> cdatum_ordering d1 d2 in
+   *      (\* XXX maybe we should throw when either ckwd has duplications *\)
+   *      let (ckwd1, ckwd2) =
+   *        let sort = List.sort_uniq compare_kw
+   *        in sort ckwd1, sort ckwd2 in
+   *      let combine kwd pos =
+   *        let kwd = kwd |&> mkkw and pos = pos |&> mkpos in
+   *        match pos with
+   *        | head :: tail -> head :: kwd @ tail
+   *        | [] -> pos in
+   *      let compare = function
+   *        | [], [] -> 0
+   *        | _, [] -> 1
+   *        | [], _ -> -1
+   *        | h1::_, h2::_ -> compare_node h1 h2 in
+   *      compare (combine ckwd1 cpos1, combine ckwd2 cpos2) *)
+
+  let cdatum_ordering = compare
 
   (** semantical equivalence of two datums *)
   let eqv_cdatum x y = cdatum_ordering x y = 0
