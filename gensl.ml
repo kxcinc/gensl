@@ -186,11 +186,14 @@ module Canonicaltree = struct
          match pos with
          | head :: tail -> head :: kwd @ tail
          | [] -> pos in
-       let compare = function
+       let rec compare = function
          | [], [] -> 0
          | _, [] -> 1
          | [], _ -> -1
-         | h1::_, h2::_ -> compare_node h1 h2 in
+         | h1::r1, h2::r2 -> (
+           match compare_node h1 h2 with
+           | 0 -> compare (r1,r2)
+           | otherwise -> otherwise) in
        compare (combine ckwd1 cpos1, combine ckwd2 cpos2)
 
   (** semantical equivalence of two datums *)
