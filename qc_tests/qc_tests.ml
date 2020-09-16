@@ -129,9 +129,8 @@ module TreeGen = struct
          (1 -- fsize) >>= fun fac2 -> 
          (1 -- fsize) >>= fun fac3 ->
          map3
-          (fun nkwd npos nann -> NForm { n_keywordeds  = nkwd ;
-                                         n_positionals = npos ;
-                                         n_annotations = nann })
+          (fun nkwd npos nann ->
+            Normaltree.nform nkwd npos nann)
           (list_size (pure (n/fac1*2/9)) @@ pair (self fac1) (self fac1))
           (list_size (pure (n/fac2*5/9)) @@ self (fac2))
           (list_size (pure (n/fac3*2/9)) @@ self (fac3)))
@@ -148,7 +147,7 @@ module TreeGen = struct
     | NAtom a -> atom_shrink a @@ fun a' -> yield (NAtom a')
     | NAnnotated (dat, anns) ->
       (pair ndatum_shrink (list ~shrink:ndatum_shrink)) (dat, anns) @@
-      fun (dat', anns') -> yield (NAnnotated (dat', anns'))
+      fun (dat', anns') -> yield (Normaltree.nannotated dat' anns')
     | NForm { n_keywordeds; n_positionals; n_annotations } ->
       let shrink_kw: (ndatum * ndatum) Shrink.t = pair ndatum_shrink ndatum_shrink in
       (* CAUTION: can be very, very slow! *)
@@ -186,6 +185,8 @@ let rec size_of_cdatum = Canonicaltree.(
        let ckwd = List.fmap (fun (a,b) -> [a; b]) ckwd in
        count ckwd + count cpos + 1)
 
+let unless b msg = if not b then QCheck.Test.fail_report msg else true
+
 let test_cdatum_ndatum =
   let open Normaltree in
   let open TreeGen in
@@ -197,18 +198,24 @@ let test_cdatum_ndatum =
 (* minimum failing case: ((anno (bytes:)) (anno ())) *)
 let test_ndatum_ddatum =
   let open Datatree in
+  let open Normaltree in
   let open TreeGen in
   QCheck.(Test.make ~name:"ndatum_of_ddatum \\o ddatum_of_ndatum is id"
             ~count:100
             ndatum
-            (fun ndatum -> (ndatum_of_ddatum (ddatum_of_ndatum ndatum)) = ndatum))
+            (fun ndatum ->
+              unless
+                ((ndatum_of_ddatum (ddatum_of_ndatum ndatum)) = ndatum)
+                Format.(asprintf "ntree : %a@.dtree : %a@.ntree': %a@."
+                          pp_ndatum ndatum
+                          pp_ddatum (ddatum_of_ndatum ndatum)
+                          pp_ndatum (ndatum_of_ddatum (ddatum_of_ndatum ndatum)))))
 
 let test_cdatum_ordering =
   let open Canonicaltree in
   let open TreeGen in
   let open QCheck in
   let (<<=) a b = cdatum_ordering a b <= 0 in
-  let unless b msg = if not b then Test.fail_report msg else true in
   let antisymmetric ?case a b =
     let res =
       (a <<= b && b <<= a) ==> (a = b) in
