@@ -71,6 +71,12 @@ module type Treeflavor = sig
   val to_parsetree     : datum -> ptree
 end
 
+(* TASK 1 *)
+(* module CanonicaltreeFlavor : Treeflavor = struct
+ *   (\* something here *\)
+ * end *)
+(* and for the other trees *)
+
 module type Zipperlib = functor (Flavor : Treeflavor) -> sig
   type t
   type datum = Flavor.datum
@@ -105,3 +111,7 @@ module type Zipperlib = functor (Flavor : Treeflavor) -> sig
   val update_anno : datum list -> t -> t
 end
 
+(* TASK 2 *)
+(* module GenericZipperlib : Zipperlib = struct
+ *   (\* todo *\)
+ * end *)
