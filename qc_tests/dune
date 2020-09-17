@@ -1,0 +1,6 @@
+(test
+ (name qc_tests)
+ (libraries str kxclib gensl qcheck)
+ (preprocess (pps kxclib.ppx))
+ (flags (:standard
+          -open Kxclib)))

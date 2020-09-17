@@ -3,8 +3,8 @@
 
 module Basetypes = struct
   type 'a equality = 'a -> 'a -> bool
-  type ('a, 'b) assoc = ('a*'b) list*('a equality)
-  type 'a set = ('a list)*('a equality)
+  type ('a, 'b) assoc = ('a*'b) list
+  type 'a set = ('a list)
 
   type csymb =
     [ | `Toplevel | `Envelop | `Metadata   (* 0..2 *)
@@ -16,10 +16,10 @@ module Basetypes = struct
       | `Appsymb05 | `Appsymb06 | `Appsymb07 | `Appsymb08 (* 24..27 *)
       | `Appsymb09 | `Appsymb10 | `Appsymb11 | `Appsymb12 (* 28..31 *) ]
 
-  let map_assoc : ('a1 -> 'b1) -> ('a2 -> 'b2) -> 'b1 equality -> ('a1, 'a2) assoc -> ('b1, 'b2) assoc =
-    fun f g b_eq (al, _a_eq) ->
+  let map_assoc : ('a1 -> 'b1) -> ('a2 -> 'b2) -> ('a1, 'a2) assoc -> ('b1, 'b2) assoc =
+    fun f g al ->
     let fg : ('a1 * 'a2) -> ('b1 * 'b2) = fun (x, y) -> (f x, g y) in
-    (List.map fg al, b_eq)
+    (List.map fg al)
 
   let pair : ('a1 -> 'b1) -> ('a2 -> 'b2) -> ('a1 * 'a2) -> ('b1 * 'b2) =
     fun f g (x, y) -> (f x, g y)
@@ -158,42 +158,43 @@ module Canonicaltree = struct
       }
 
   (** !!this is to serve as the specification of atom ordering *)
-  (* let rec cdatum_ordering : cdatum -> cdatum -> int = fun x y ->
-   *   (\* CAtom < CForm *\)
-   *   match x, y with
-   *   | CAtom a1, CAtom a2 -> compare_atom a1 a2
-   *   | CAtom _, CForm _ -> -1
-   *   | CForm _, CAtom _ -> 1
-   *   | CForm { ckwd = (ckwd1,_); cpos = cpos1 },
-   *     CForm { ckwd = (ckwd2,_); cpos = cpos2 } ->
-   *      let open struct
-   *            type node = Kw of cdatum*cdatum | Pos of cdatum
-   *            let mkkw (k,v) = Kw (k,v) and mkpos x = Pos x
-   *          end in
-   *      let compare_kw (k1,_) (k2,_) = cdatum_ordering k1 k2 in
-   *      let compare_node n1 n2 = match n1, n2 with
-   *        (\* Kw < Pos *\)
-   *        | Kw _, Pos _ -> -1
-   *        | Pos _, Kw _ -> 1
-   *        | Kw (k1,v1), Kw (k2,v2) -> compare_kw (k1,v1) (k2,v2)
-   *        | Pos d1, Pos d2 -> cdatum_ordering d1 d2 in
-   *      (\* XXX maybe we should throw when either ckwd has duplications *\)
-   *      let (ckwd1, ckwd2) =
-   *        let sort = List.sort_uniq compare_kw
-   *        in sort ckwd1, sort ckwd2 in
-   *      let combine kwd pos =
-   *        let kwd = kwd |&> mkkw and pos = pos |&> mkpos in
-   *        match pos with
-   *        | head :: tail -> head :: kwd @ tail
-   *        | [] -> pos in
-   *      let compare = function
-   *        | [], [] -> 0
-   *        | _, [] -> 1
-   *        | [], _ -> -1
-   *        | h1::_, h2::_ -> compare_node h1 h2 in
-   *      compare (combine ckwd1 cpos1, combine ckwd2 cpos2) *)
-
-  let cdatum_ordering = compare
+  let rec cdatum_ordering : cdatum -> cdatum -> int = fun x y ->
+    (* CAtom < CForm *)
+    match x, y with
+    | CAtom a1, CAtom a2 -> compare_atom a1 a2
+    | CAtom _, CForm _ -> -1
+    | CForm _, CAtom _ -> 1
+    | CForm { ckwd = (ckwd1); cpos = cpos1 },
+      CForm { ckwd = (ckwd2); cpos = cpos2 } ->
+       let open struct
+             type node = Kw of cdatum*cdatum | Pos of cdatum
+             let mkkw (k,v) = Kw (k,v) and mkpos x = Pos x
+           end in
+       let compare_kw (k1,_) (k2,_) = cdatum_ordering k1 k2 in
+       let compare_node n1 n2 = match n1, n2 with
+         (* Kw < Pos *)
+         | Kw _, Pos _ -> -1
+         | Pos _, Kw _ -> 1
+         | Kw (k1,v1), Kw (k2,v2) -> compare_kw (k1,v1) (k2,v2)
+         | Pos d1, Pos d2 -> cdatum_ordering d1 d2 in
+       (* XXX maybe we should throw when either ckwd has duplications *)
+       let (ckwd1, ckwd2) =
+         let sort = List.sort_uniq compare_kw
+         in sort ckwd1, sort ckwd2 in
+       let combine kwd pos =
+         let kwd = kwd |&> mkkw and pos = pos |&> mkpos in
+         match pos with
+         | head :: tail -> head :: kwd @ tail
+         | [] -> pos in
+       let rec compare = function
+         | [], [] -> 0
+         | _, [] -> 1
+         | [], _ -> -1
+         | h1::r1, h2::r2 -> (
+           match compare_node h1 h2 with
+           | 0 -> compare (r1,r2)
+           | otherwise -> otherwise) in
+       compare (combine ckwd1 cpos1, combine ckwd2 cpos2)
 
   (** semantical equivalence of two datums *)
   let eqv_cdatum x y = cdatum_ordering x y = 0
@@ -201,12 +202,12 @@ module Canonicaltree = struct
   let catom atom = CAtom atom
   let cform : (cdatum * cdatum) list -> cdatum list -> cdatum =
     fun keywordeds positionals ->
-    CForm { ckwd = (keywordeds, (=));
+    CForm { ckwd = (keywordeds :> (cdatum, cdatum) assoc);
             cpos = positionals }
 
   let rec sexp_cdatum = function
     | CAtom a -> sexp_atom a
-    | CForm { ckwd = (ckws, _);
+    | CForm { ckwd = ckws;
               cpos = cposes } ->
       let sexp_kw = fun (k, v) -> List [Atom "kwnode"; sexp_cdatum k; sexp_cdatum v] in
       List (List.map sexp_kw ckws @ List.map sexp_cdatum cposes)
@@ -237,37 +238,42 @@ module Normaltree = struct
     match nt with
     | NAtom a -> CAtom a
     | NForm {n_keywordeds = nkws; n_positionals = nposes; n_annotations = _ann} ->
-      CForm {ckwd = map_assoc cdatum_of_ndatum cdatum_of_ndatum (=) nkws ;
+      CForm {ckwd = map_assoc cdatum_of_ndatum cdatum_of_ndatum nkws ;
              cpos = List.map cdatum_of_ndatum nposes}
     | NAnnotated (ndat, _annos) -> cdatum_of_ndatum ndat
         
-  and eq_ndatum : ndatum equality = fun a b -> (cdatum_of_ndatum a) = (cdatum_of_ndatum b)
+  and eq_ndatum : ndatum equality = fun a b -> eqv_cdatum (cdatum_of_ndatum a) (cdatum_of_ndatum b)
+  let sord_ndatum a b = cdatum_ordering (cdatum_of_ndatum a) (cdatum_of_ndatum b)
   let natom atom = NAtom atom
   let nform : (ndatum*ndatum) list -> ndatum list -> ndatum list -> ndatum =
     fun keywordeds positionals annotations ->
-    NForm { n_keywordeds = (keywordeds, eq_ndatum);
+    NForm { n_keywordeds =
+              (* XXX warn on duplicated kw *)
+              List.sort_uniq (fun a b -> sord_ndatum (fst a) (fst b)) keywordeds;
             n_positionals = positionals;
-            n_annotations = (annotations, eq_ndatum) }
+            n_annotations =
+              List.sort sord_ndatum annotations }
   let nannotated : ndatum -> ndatum list -> ndatum =
     fun annotated annotations ->
-    NAnnotated (annotated, (annotations, eq_ndatum))
-
+    NAnnotated (annotated,
+                List.sort sord_ndatum annotations)
+      
   let rec ndatum_of_cdatum : cdatum -> ndatum = function
     | CAtom a -> NAtom a
     | CForm {ckwd = ckws; cpos = cposes} ->
-      NForm {n_keywordeds = map_assoc ndatum_of_cdatum ndatum_of_cdatum eq_ndatum ckws ;
+      NForm {n_keywordeds = map_assoc ndatum_of_cdatum ndatum_of_cdatum ckws ;
              n_positionals = List.map ndatum_of_cdatum cposes ;
-             n_annotations = ([], eq_ndatum) }
+             n_annotations = [] }
 
   let rec sexp_ndatum = function
     | NAtom a -> sexp_atom a
-    | NForm { n_keywordeds = (nkws, _);
+    | NForm { n_keywordeds = nkws;
               n_positionals = nposes;
-              n_annotations = (nanns, _) } ->
+              n_annotations = nanns } ->
       let sexp_kw = fun (k, v) -> List [Atom "kwnode"; sexp_ndatum k; sexp_ndatum v] in
       let sexp_ann = fun dat -> List [Atom "anno"; sexp_ndatum dat] in
       List (List.map sexp_kw nkws @ List.map sexp_ndatum nposes @ List.map sexp_ann nanns)
-    | NAnnotated (ndat, (nannos, _)) ->
+    | NAnnotated (ndat, nannos) ->
       List (Atom "annotated" :: sexp_ndatum ndat ::
             Atom ":front" ::
             List.map sexp_ndatum nannos)
@@ -310,24 +316,22 @@ module Datatree = struct
         end
       in
       let (kws, posses, anns) = List.fold_left f ([], [], []) dnodes in
-      NForm {n_keywordeds = (kws, eq_ndatum);
-             n_positionals = posses;
-             n_annotations = (anns, eq_ndatum)}
+      nform kws (List.rev posses) anns
     | DAnnotated {d_annotated = dat;
-                  d_anno_front = front_anns;
-                  d_anno_back = back_anns} ->
-      let front = List.map ndatum_of_ddatum front_anns in
-      let back  = List.map ndatum_of_ddatum back_anns  in
-      NAnnotated (ndatum_of_ddatum dat, (front @ back, eq_ndatum))
+                  d_anno_front = front;
+                  d_anno_back = back} ->
+      let front = List.map ndatum_of_ddatum front in
+      let back  = List.map ndatum_of_ddatum back in
+      nannotated (ndatum_of_ddatum dat) (front @ back)
 
   let eqv_ddatum : ddatum equality =
     fun a b -> eq_ndatum (ndatum_of_ddatum a) (ndatum_of_ddatum b)
   
   let rec ddatum_of_ndatum : ndatum -> ddatum = function
     | NAtom a -> DAtom a
-    | NForm {n_keywordeds = (nkws, _);
+    | NForm {n_keywordeds = nkws;
              n_positionals = nposes;
-             n_annotations = (nanns, _)} ->
+             n_annotations = nanns} ->
       let dkws =
         nkws
         |&> (pair2 ddatum_of_ndatum)
@@ -341,9 +345,9 @@ module Datatree = struct
         | head :: rest ->
           let head = head |> ddatum_of_ndatum |> (fun x -> DDatumNode x) in
           let rest = rest |&> ddatum_of_ndatum |&> (fun x -> DDatumNode x) in
-          DForm (head :: dkws @ danns @ rest)
+          DForm (head :: dkws @ rest @ danns)
       end
-    | NAnnotated (ndat, (nanns, _)) ->
+    | NAnnotated (ndat, nanns) ->
       let ddat = ddatum_of_ndatum ndat in
       let danns = List.map ddatum_of_ndatum nanns in
       DAnnotated {d_annotated = ddat;
@@ -531,8 +535,45 @@ module Parsetree = struct
   and pdatum_of_ddatum : ddatum -> pdatum = function
     | DAtom a -> PAtom {elem = a; repr = `Direct}
     | DForm nodes ->
-      let nodes = List.map pnode_of_dnode nodes in
-      let elem = (nodes, SimpleForm, Infix) in
+      let form_type =
+        match nodes with
+        | (DDatumNode (DAtom (CodifiedSymbolAtom `Toplevel)) :: _) ->
+          `Toplevel
+        | (DDatumNode (DAtom (CodifiedSymbolAtom `List)) :: _) ->
+          `List
+        | (DDatumNode (DAtom (CodifiedSymbolAtom `Map)) :: _) ->
+          `Map
+        | (DDatumNode (DAtom (CodifiedSymbolAtom `Vector)) :: _) ->
+          failwith "VectorForm handling is not implemented yet!"
+        | (DDatumNode (DAtom (CodifiedSymbolAtom `Set)) :: _) ->
+          `Set
+        | _ -> `Regular
+      in
+      let nodes =
+        match form_type with
+        | `Regular -> List.map pnode_of_dnode nodes
+        | `Set ->
+          begin
+            let resugar_dnode n =
+              match n with
+              | DKeywordNode (dat, DAtom (BoolAtom true)) ->
+                PDatumNode (pdatum_of_ddatum dat)
+              | DKeywordNode (_, _) -> failwith "Invalid node while trying to resugar SetForm!"
+              | DAnnoNode _ -> pnode_of_dnode n
+              | _ -> failwith "Invalid node while trying to resugar SetForm!"
+            in
+            List.map resugar_dnode (List.tl nodes)
+          end
+        | _ -> List.map pnode_of_dnode (List.tl nodes)
+      in (* List.map pnode_of_dnode nodes in *)
+      let elem =
+        match form_type with
+        | `Regular -> (nodes, SimpleForm, Infix)
+        | `Toplevel -> (nodes, ToplevelForm, Infix)
+        | `List -> (nodes, ListForm, Infix)
+        | `Map -> (nodes, MapForm, Infix)
+        | `Set -> (nodes, SetForm, Infix)
+      in
       PForm {elem = elem; repr = `Direct}
     | DAnnotated { d_annotated  = ddat;
                    d_anno_front = dfront;
