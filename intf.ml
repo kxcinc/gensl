@@ -116,9 +116,9 @@ module CanonicaltreeFlavor : Treeflavor = struct
   let compare : datum -> datum -> int = cdatum_ordering
   let eqv c c': bool = cdatum_ordering c c' = 0
   let pp : formatter -> datum -> unit = pp_cdatum
-  let to_string : ?pretty:bool -> datum -> string = [%noimplval]
+  let to_string ?pretty:(_=false) = Format.asprintf "%a" pp
   let datum_of_sexp : sexp -> datum = [%noimplval]
-  let sexp_of_datum : datum -> sexp = [%noimplval]
+  let sexp_of_datum : datum -> sexp = sexp_cdatum
   
   (** destructors *)
 
@@ -141,8 +141,8 @@ module CanonicaltreeFlavor : Treeflavor = struct
        | None -> failwith "Invalid key!")
     | _ -> failwith "No keyword arguments!"
   
-  let root : datum -> datum = [%noimplval]
-  (* No annotations ath the Canonicaltree level *)
+  let root : datum -> datum = fun d -> d
+  (* No annotations at the Canonicaltree level *)
   let anno : datum -> datum list = fun _ -> []
   
   (** constructors & case analyzer *)
@@ -178,7 +178,7 @@ module CanonicaltreeFlavor : Treeflavor = struct
       
       
   let update_kval : key:datum -> datum option -> datum -> datum = [%noimplval]
-  let update_root : datum -> datum -> datum = [%noimplval]
+  let update_root : datum -> datum -> datum = fun _ d -> d
   let update_anno : datum list -> datum -> datum = fun _ dat -> dat
 
   (** converters *)
