@@ -182,8 +182,7 @@ module CanonicaltreeFlavor : Treeflavor = struct
   let to_datatree      : datum -> dtree =
     composite Datatree.ddatum_of_ndatum Normaltree.ndatum_of_cdatum 
   let to_parsetree     : datum -> ptree =
-    composite Parsetree.pdatum_of_ddatum (composite Datatree.ddatum_of_ndatum Normaltree.ndatum_of_cdatum)
-      
+    composite Parsetree.pdatum_of_ddatum (composite Datatree.ddatum_of_ndatum Normaltree.ndatum_of_cdatum)  
 end
 
 module Normaltreeflavor : Treeflavor = struct
@@ -306,6 +305,176 @@ module Normaltreeflavor : Treeflavor = struct
   let to_datatree      : datum -> dtree = Datatree.ddatum_of_ndatum
   let to_parsetree     : datum -> ptree =
     composite Parsetree.pdatum_of_ddatum Datatree.ddatum_of_ndatum
+end
+
+module Datatreeflavor : Treeflavor = struct
+  open Datatree
+  type datum = Datatree.ddatum
+  (*
+    | DAtom of atom (* an atom *)
+    | DForm of dnode list (* a form is represented as a list of nodes *)
+    | DAnnotated of {
+        d_annotated : ddatum;
+        d_anno_front : ddatum list;
+        d_anno_back : ddatum list;
+      }
+  and  dnode =
+    | DKeywordNode of ddatum * ddatum
+    | DDatumNode of ddatum
+    | DAnnoNode of ddatum *)
+      
+  type flavor = dtree
+  let treeflavor : dtree treeflavor = Dtree
+
+  let compare d d' = Canonicaltree.cdatum_ordering (Normaltree.cdatum_of_ndatum (ndatum_of_ddatum d)) (Normaltree.cdatum_of_ndatum (ndatum_of_ddatum d'))
+  let eqv d d': bool = compare d d' = 0
+  let pp : formatter -> datum -> unit = pp_ddatum
+  let to_string ?pretty:(_=false) = Format.asprintf "%a" pp
+  let datum_of_sexp : sexp -> datum = [%noimplval]
+  let sexp_of_datum : datum -> sexp = sexp_ddatum
+  
+  (** destructors *)
+
+  let atom dat =
+    match dat with
+    | DAtom a -> a
+    | _ -> failwith "Not an atom!"
+
+  let is_datum_node (node: dnode): bool =
+    match node with DDatumNode _ -> true | _ -> false
+
+  let npos ~pos dat =
+    let get_nth_datum n (nodes: dnode list): ddatum =
+      match List.nth (List.filter is_datum_node nodes) n with
+      | DDatumNode d -> d | _ -> failwith "Impossible!"
+    in
+    match dat with
+    | DForm dnodes -> get_nth_datum pos dnodes
+    | _ -> failwith "No positional nodes!"
+             
+  let is_kw_node (node: dnode): bool =
+      match node with DKeywordNode (_, _) -> true | _ -> false
+  
+  let kval ~key dat =
+    let raw_nodes nodes = List.map
+                      (fun n -> match n with DKeywordNode (k, w) -> (k, w)
+                                           | _ -> failwith "Impossible!")
+                      (List.filter is_kw_node nodes) in
+    let get_kval k (nodes: dnode list): ddatum =
+      match List.assoc_opt k (raw_nodes nodes) with
+      | Some v -> v
+      | None -> failwith "Invalid key!"
+    in
+    match dat with
+    | DForm dnodes -> get_kval key dnodes
+    | _ -> failwith "No positional nodes!"
+  
+  let root dat =
+    match dat with
+    | DAnnotated {d_annotated; _} -> d_annotated
+    | _ -> failwith "Not an annotated tree!"
+
+  let anno dat =
+    match dat with
+    | DAnnotated {d_anno_front = front; d_anno_back = back; _} -> front @ back
+    | _ -> failwith "No annotations!"
+  
+  (** constructors & case analyzer *)
+
+  let mkatom : atom -> datum = fun a -> DAtom a
+
+  let mkform ~keyworded ~positional =
+    let kw_nodes = List.map (fun (k, v) -> DKeywordNode (k, v)) keyworded in
+    let pos_nodes = List.map (fun d -> DDatumNode d) positional in
+    DForm (kw_nodes @ pos_nodes)
+    
+  (* val case : atom:(datum -> 'r) ->
+             form:(keyworded:(datum*datum) list ->
+                   positional:datum list ->
+                   'r) ->
+             datum -> 'r *)
+  let rec case ~atom ~form d =
+    match d with
+    | DAtom _ -> atom d
+    | DForm dnodes ->
+       let data = List.filter is_datum_node dnodes in
+       let kws = List.filter is_kw_node dnodes in
+       let data_plain =
+         List.map (fun n -> match n with DDatumNode d -> d | _ -> failwith "Impossible!") data in
+       let kws_plain =
+         List.map (fun n -> match n with DKeywordNode (k, w) -> (k, w)
+                                       | _ -> failwith "Impossible!") kws in
+       form ~keyworded:kws_plain ~positional:data_plain
+    | DAnnotated {d_annotated = dat; _} -> case ~atom:atom ~form:form dat
+       
+
+  (** updaters *)
+
+  let update_atom a dat =
+    match dat with
+    | DAtom _ -> DAtom a
+    | _ -> dat
+
+  let update_npos ~pos (nd: datum option) (dat: datum): datum =
+    match dat with
+    | DForm dnodes ->
+       begin
+         let data = List.filter is_datum_node dnodes in
+         let kws = List.filter is_kw_node dnodes in
+         let data_plain =
+           List.map (fun n -> match n with DDatumNode d -> d | _ -> failwith "Impossible!") data in
+         let data_new =
+           match nd with
+           | Some d -> update pos d data_plain
+           | None -> remove pos data_plain
+         in
+         let nodes = List.map (fun d -> DDatumNode d) data_new @ kws in
+         DForm nodes
+       end
+    | _ -> failwith "Not a form!"
+     
+    
+
+  let update_kval ~key (nd: datum option) (dat: datum): datum =
+   match dat with
+    | DForm dnodes ->
+       begin
+         let data = List.filter is_datum_node dnodes in
+         let kws = List.filter is_kw_node dnodes in
+         let kw_plain =
+           List.map (fun n -> match n with DKeywordNode (k, v) -> (k, v) | _ -> failwith "Impossible!") kws in
+         let kw_new =
+           match nd with
+           | Some d -> update_assoc key d kw_plain
+           | None -> List.remove_assoc key kw_plain
+         in
+         let nodes = data @ List.map (fun (k, v) -> DKeywordNode (k, v)) kw_new in
+         DForm nodes
+       end
+    | _ -> failwith "Not a form!"
+      
+  let update_root (nd: datum) (dat: datum): datum =
+    match dat with
+    | DAnnotated ({d_annotated = _;
+                   d_anno_front = _;
+                   d_anno_back = _} as ann) ->
+       DAnnotated {ann with d_annotated = nd}
+    | _ -> dat
+  
+  let update_anno (nanns: datum list) (dat: datum): datum =
+    match dat with
+    | DAnnotated ({d_annotated = _;
+                   d_anno_front = _;
+                   d_anno_back = _} as ann) ->
+       DAnnotated {ann with d_anno_front = nanns}
+    | _ -> dat
+
+  (** converters *)
+
+  let to_canonicaltree : datum -> ctree = composite Normaltree.cdatum_of_ndatum ndatum_of_ddatum
+  let to_normaltree    : datum -> ntree = ndatum_of_ddatum
+  let to_datatree      : datum -> dtree = fun d -> d
+  let to_parsetree     : datum -> ptree = Parsetree.pdatum_of_ddatum
 end
 
 module type Zipperlib = functor (Flavor : Treeflavor) -> sig
