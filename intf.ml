@@ -33,7 +33,7 @@ module type Treeflavor = sig
   val eqv : datum -> datum -> bool
   val pp : formatter -> datum -> unit
   val to_string : ?pretty:bool -> datum -> string
-  val datum_of_sexp : sexp -> datum
+  (* val datum_of_sexp : sexp -> datum *)
   val sexp_of_datum : datum -> sexp
   
   (** destructors *)
@@ -87,7 +87,9 @@ let remove (n: int) (xs: 'a list): 'a list =
  *   (\* something here *\)
  * end *)
 (* and for the other trees *)
-module CanonicaltreeFlavor : Treeflavor = struct
+(* must make this transparent using with! very important otherwise basically impossible 
+   to use and test *)
+module CanonicaltreeFlavor : (Treeflavor with type datum = Canonicaltree.cdatum) = struct
   open Canonicaltree
   type datum = Canonicaltree.cdatum
   (*
@@ -105,7 +107,7 @@ module CanonicaltreeFlavor : Treeflavor = struct
   let eqv c c': bool = cdatum_ordering c c' = 0
   let pp : formatter -> datum -> unit = pp_cdatum
   let to_string ?pretty:(_=false) = Format.asprintf "%a" pp
-  let datum_of_sexp : sexp -> datum = [%noimplval]
+  (* let datum_of_sexp : sexp -> datum = failwith "placeholder" *)
   let sexp_of_datum : datum -> sexp = sexp_cdatum
   
   (** destructors *)
@@ -206,7 +208,7 @@ module Normaltreeflavor : Treeflavor = struct
   let eqv n n': bool = compare n n' = 0
   let pp : formatter -> datum -> unit = pp_ndatum
   let to_string ?pretty:(_=false) = Format.asprintf "%a" pp
-  let datum_of_sexp : sexp -> datum = [%noimplval]
+  (* let datum_of_sexp : sexp -> datum = failwith "placeholder" *)
   let sexp_of_datum : datum -> sexp = sexp_ndatum
   
   (** destructors *)
@@ -330,7 +332,7 @@ module Datatreeflavor : Treeflavor = struct
   let eqv d d': bool = compare d d' = 0
   let pp : formatter -> datum -> unit = pp_ddatum
   let to_string ?pretty:(_=false) = Format.asprintf "%a" pp
-  let datum_of_sexp : sexp -> datum = [%noimplval]
+  (* let datum_of_sexp : sexp -> datum = failwith "placeholder" *)
   let sexp_of_datum : datum -> sexp = sexp_ddatum
   
   (** destructors *)
@@ -477,7 +479,7 @@ module Datatreeflavor : Treeflavor = struct
   let to_parsetree     : datum -> ptree = Parsetree.pdatum_of_ddatum
 end
 
-module Parsetreeflavor : Treeflavor = struct
+module Parsetreeflavor : (Treeflavor with type datum = Parsetree.pdatum) = struct
   open Parsetree
   open ParsetreePrinter
   type datum = Parsetree.pdatum
@@ -501,7 +503,7 @@ module Parsetreeflavor : Treeflavor = struct
   let eqv p p': bool = compare p p' = 0
   let pp : formatter -> datum -> unit = pp_pdatum
   let to_string ?pretty:(_=false) = Format.asprintf "%a" pp
-  let datum_of_sexp : sexp -> datum = [%noimplval]
+  (* let datum_of_sexp : sexp -> datum = failwith "placeholder" *)
   let sexp_of_datum : datum -> sexp = sexp_pdatum
   
   (** destructors *)
@@ -799,4 +801,15 @@ module GenericZipperlib (Flavor : Treeflavor) = struct
   let remove_node = function
     | _, [] -> failwith "Nothing to remove!"
     | d, _ :: rest -> walk_upwards (d, rest)
+
+  let update_npos ~pos nd ((d, path) as z: t): t =
+    d, PCnpos { npos_focused = Flavor.update_npos ~pos nd (focus z);
+                npos_pos = pos } :: path
+
+  let update_kval ~key nd ((d, path) as z: t): t =
+    d, PCkval { kval_focused = Flavor.update_kval ~key nd (focus z);
+                kval_key = key } :: path
+  
+  let update_root nd (d, path) = 
+    d, PCroot { root_focused = nd } :: path
 end
