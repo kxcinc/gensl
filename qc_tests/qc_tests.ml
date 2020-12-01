@@ -1,5 +1,6 @@
 [@@@warning "-all"]
 open Gensl
+open Intf
 
 let test_id = QCheck.(Test.make ~count:100 int (fun x -> x = x))
 
@@ -61,9 +62,8 @@ module BasetypesGen = struct
     | BytesAtom b -> string (Bytes.to_string b) @@ fun s' -> yield (BytesAtom (Bytes.unsafe_of_string s'))
     | NumericAtom (n, a) -> (pair int string) (int_of_string n, a) @@ fun (n', a') -> yield (NumericAtom (string_of_int n', a'))
     | BoolAtom _ -> ()
-
-  let (_: atom Shrink.t) = atom_shrink
   
+  let atoma = make ~shrink:atom_shrink atom
 end
 
 module TreeGen = struct
@@ -173,6 +173,47 @@ module TreeGen = struct
     | DKeywordNode of ddatum * ddatum
     | DDatumNode of ddatum
     | DAnnoNode of ddatum
+
+  let ddatum_gen = sized @@ fix (fun self n ->
+      match n with
+      | 0 | 1 -> (fun x -> DAtom x) <$> atom
+      | _ -> 
+         let fsize = (max 1 (n/6)) in
+         let dnode_gen = fun g n m ->
+           oneof
+             [ map (fun d -> DDatumNode d) (g n);
+               map (fun d -> DAnnoNode d) (g n);
+               map2 (fun d d' -> (DKeywordNode (d, d'))) (g n) (g m) ] in
+         (1 -- fsize) >>= fun fac1 ->
+         (1 -- fsize) >>= fun fac2 ->
+         map (fun dnodes -> Datatree.dform dnodes)
+           (list_size (pure (n/fac1*2/9)) @@ dnode_gen self fac1 fac2))   
+
+  let ddatum_printer ddatum =
+    let open Datatree in
+    let open Format in
+    fprintf str_formatter "%a" pp_ddatum ddatum;
+    flush_str_formatter ()   
+
+  let rec ddatum_shrink (ddatum: ddatum) (yield: ddatum -> unit) =
+    let open Shrink in
+    match ddatum with
+    | DAtom a -> atom_shrink a @@ fun a' -> yield (DAtom a')
+    | DAnnotated {d_annotated = dat;
+                  d_anno_front = anns_f;
+                  d_anno_back = anns_b} ->
+       (* (pair ndatum_shrink (list ~shrink:ndatum_shrink)) (dat, anns) @@
+         fun (dat', anns') -> yield (Normaltree.nannotated dat' anns')
+    | NForm { n_keywordeds; n_positionals; n_annotations } ->
+       let shrink_kw: (ndatum * ndatum) Shrink.t = pair ndatum_shrink ndatum_shrink in
+       (* CAUTION: can be very, very slow! *)
+       (triple (list ~shrink:shrink_kw) (list ~shrink:ndatum_shrink) (list ~shrink:ndatum_shrink))
+         (n_keywordeds, n_positionals, n_annotations) @@
+         (fun (kws', poses', anns') -> yield (NForm { n_keywordeds  = kws';
+                                                      n_positionals = poses';
+                                                      n_annotations = anns' })) *)
+       [%noimplval]
+
 end
 
 let rec size_of_cdatum = Canonicaltree.(
@@ -240,6 +281,54 @@ let test_cdatum_ordering =
         then unless (transitive a b c) "trans a b c"
         else unless (transitive b a c) "trans b a c"))
 
+let test_atom_dest_cons_canonical = 
+  let open CanonicaltreeFlavor in
+  let open BasetypesGen in
+  QCheck.(Test.make ~name:"Test constructors and destructors for CanonicaltreeFlavor"
+            ~count:100
+            atoma
+            (fun a -> CanonicaltreeFlavor.atom (mkatom a) = a))
+
+let test_eqv_self_canonical = 
+  let open CanonicaltreeFlavor in
+  let open TreeGen in
+  QCheck.(Test.make ~name:"Test that a tree is equivalent to itself (CanonicaltreeFlavor)"
+            ~count:100
+            cdatum
+            (fun c -> CanonicaltreeFlavor.eqv c c))
+
+let test_atom_dest_cons_normal = 
+  let open Normaltreeflavor in
+  let open BasetypesGen in
+  QCheck.(Test.make ~name:"Test constructors and destructors for Normaltreeflavor"
+            ~count:100
+            atoma
+            (fun a -> Normaltreeflavor.atom (mkatom a) = a))
+
+let test_atom_dest_cons_data = 
+  let open Datatreeflavor in
+  let open BasetypesGen in
+  QCheck.(Test.make ~name:"Test constructors and destructors for Datatreeflavor"
+            ~count:100
+            atoma
+            (fun a -> Datatreeflavor.atom (mkatom a) = a))
+
+let test_atom_dest_cons_parse = 
+  let open Parsetreeflavor in
+  let open BasetypesGen in
+  QCheck.(Test.make ~name:"Test constructors and destructors for Parsetreeflavor"
+            ~count:100
+            atoma
+            (fun a -> Parsetreeflavor.atom (mkatom a) = a))
+
+let test_eqv_self_parse = 
+  let open Parsetreeflavor in
+  let open TreeGen in
+  QCheck.(Test.make ~name:"Test that a tree is equivalent to itself (Parsetreeflavor)"
+            ~count:100
+            pdatum
+            (fun c -> Parsetreeflavor.eqv c c))
+
 let () =
   let open QCheck_runner in
   run_tests_main
@@ -249,4 +338,9 @@ let () =
       test_cdatum_ordering;
       test_cdatum_ndatum;
       test_ndatum_ddatum;
+      test_atom_dest_cons_canonical;
+      test_atom_dest_cons_normal;
+      test_atom_dest_cons_data;
+      test_atom_dest_cons_parse;
+      test_eqv_self_canonical;
     ]
