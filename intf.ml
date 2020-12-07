@@ -681,7 +681,8 @@ module type Zipperlib = functor (Flavor : Treeflavor) -> sig
   (** primitive updaters *)
 
   val update_node : datum -> t -> t (* focus remains the same afterwards *)
-  val remove_node : t -> t          (* automatically walk-up afterwards *)
+  val remove_node : t -> int * t    (* automatically walk-up afterwards *)
+  val remove_node_imm : t -> t      (* remove_node but assert [depth of walk-up] equals one *)
 
   (** utility updaters *)
 
@@ -698,7 +699,7 @@ end
  * end *)
 
 
-module GenericZipperlib (Flavor : Treeflavor) = struct
+module GenericZipperlib (Flavor : Treeflavor)  = struct
   type datum = Flavor.datum
 
   type path_component = 
@@ -791,25 +792,69 @@ module GenericZipperlib (Flavor : Treeflavor) = struct
     | d, [] -> d
     | z -> unwalk (walk_upwards z)
 
-  let update_node (nd: datum) = function
+  let update_node (nd: datum): t -> t = function
     | _, [] -> nd, []
     | d, PCroot _ :: rest -> d, PCroot {root_focused = nd} :: rest
     | d, PCanno r :: rest -> d, PCanno {r with anno_focused = nd} :: rest
     | d, PCnpos r :: rest -> d, PCnpos {r with npos_focused = nd} :: rest
     | d, PCkval r :: rest -> d, PCkval {r with kval_focused = nd} :: rest
 
-  let remove_node = function
-    | _, [] -> failwith "Nothing to remove!"
-    | d, _ :: rest -> walk_upwards (d, rest)
+  let _ = remove
 
-  let update_npos ~pos nd ((d, path) as z: t): t =
-    d, PCnpos { npos_focused = Flavor.update_npos ~pos nd (focus z);
-                npos_pos = pos } :: path
+  let get_positionals = 
+    Flavor.case ~atom:(fun a -> [a])
+      ~form:(fun ~keyworded:_ ~positional -> positional)
 
-  let update_kval ~key nd ((d, path) as z: t): t =
-    d, PCkval { kval_focused = Flavor.update_kval ~key nd (focus z);
-                kval_key = key } :: path
+  let remove_node (z: t) =
+    let rec loop upwards_depth = function
+      | _, [] -> failwith "Nothing to remove!"
+      | d, PCroot _ :: rest ->
+         loop (upwards_depth+1) (d, rest)
+      | d, PCanno r :: rest ->
+         let parent = focus (d, rest) in
+         let orig = Flavor.anno parent in
+         let updated = remove r.anno_pos orig in
+         let parent = Flavor.update_anno updated parent in
+         1, ((d, rest) |> update_node parent)
+      | d, PCnpos r :: rest ->
+         let parent = focus (d, rest) in
+         let parent = Flavor.update_npos ~pos:r.npos_pos None parent in
+         1, ((d, rest) |> update_node parent)
+      | d, PCkval r :: rest ->
+         let parent = focus (d, rest) in
+         let parent = Flavor.update_kval ~key:r.kval_key None parent in
+         1, ((d, rest) |> update_node parent)
+      (* | _ -> [%noimplval] *)
+    (* | d, _ :: rest -> walk_upwards (d, rest) *) in
+    loop 0 z
+
+  let remove_node_imm t =
+    let depth, nt = remove_node t in
+    if depth = 1
+    then nt
+    else invalid_arg "assertion (depth=1) failed for remove_node_imm"
   
-  let update_root nd (d, path) = 
-    d, PCroot { root_focused = nd } :: path
+  let update_npos ~pos new_datum z: t =
+    match new_datum with
+    | None ->
+       walk_npos ~pos z
+       |> remove_node_imm
+    | Some nd ->
+       walk_npos ~pos z
+       |> update_node nd
+       |> walk_upwards
+
+  let update_kval ~key new_datum z: t =
+    match new_datum with
+    | None ->
+       walk_kval ~key z
+       |> remove_node_imm
+    | Some nd ->
+       walk_kval ~key z
+       |> update_node nd
+       |> walk_upwards
+  
+  let update_root nd z = 
+    walk_root z
+    |> update_node nd
 end
