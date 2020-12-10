@@ -1,4 +1,5 @@
 open Gensl
+open Intf
 
 let output_debug = ref false
 
@@ -396,3 +397,33 @@ let%test "eqv_ddatum disregards ordering and annotations (2)" =
         ppd d2
   );
   res = expect
+
+let%test "walk and then unwalk produces same tree" = 
+  let open Datatree in
+  let open Datatreeflavor in
+  let datom_string str = datom (StringAtom str) in
+  let k1 = datom_string "k1" in
+  let v1 = datom_string "v1" in
+  let k2 = datom_string "k2" in
+  let v2 = datom_string "v2" in
+  let ann1 = datom_string "foo" in
+  let (d: datum) = dform [dkeywordnode k1 v1; dkeywordnode k2 v2; dannonode ann1] in
+  let module DtreeZipper = GenericZipperlib(Datatreeflavor) in
+  let open DtreeZipper in
+  unwalk (walk d) = d
+
+let%test "update kval in zipper" = 
+  let open Datatree in
+  let open Datatreeflavor in
+  let datom_string str = datom (StringAtom str) in
+  let k1 = datom_string "k1" in
+  let v1 = datom_string "v1" in
+  let v1' = datom_string "v1'" in
+  let k2 = datom_string "k2" in
+  let v2 = datom_string "v2" in
+  let ann1 = datom_string "foo" in
+  let (d: datum) = dform [dkeywordnode k1 v1; dkeywordnode k2 v2; dannonode ann1] in
+  let d' = dform [dkeywordnode k1 v1'; dkeywordnode k2 v2; dannonode ann1] in
+  let module DtreeZipper = GenericZipperlib(Datatreeflavor) in
+  let open DtreeZipper in
+  walk d' = update_kval ~key:k1 (Some v1') (walk d)

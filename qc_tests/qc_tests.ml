@@ -321,13 +321,23 @@ let test_atom_dest_cons_parse =
             atoma
             (fun a -> Parsetreeflavor.atom (mkatom a) = a))
 
-let test_eqv_self_parse = 
+(* let test_eqv_self_parse = 
   let open Parsetreeflavor in
   let open TreeGen in
   QCheck.(Test.make ~name:"Test that a tree is equivalent to itself (Parsetreeflavor)"
             ~count:100
             pdatum
-            (fun c -> Parsetreeflavor.eqv c c))
+            (fun c -> Parsetreeflavor.eqv c c)) *)
+
+let test_walk_unwalk_canonical = 
+  let open CanonicaltreeFlavor in
+  let module CtreeZipper = GenericZipperlib(CanonicaltreeFlavor) in
+  let open CtreeZipper in
+  let open TreeGen in
+  QCheck.(Test.make ~name:"Test that walking and then unwalking a canonical tree produces the right tree"
+            ~count:100
+            cdatum
+            (fun c -> unwalk (walk c) = c))
 
 let () =
   let open QCheck_runner in
@@ -343,4 +353,5 @@ let () =
       test_atom_dest_cons_data;
       test_atom_dest_cons_parse;
       test_eqv_self_canonical;
+      test_walk_unwalk_canonical;
     ]

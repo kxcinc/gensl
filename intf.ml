@@ -309,7 +309,7 @@ module Normaltreeflavor : Treeflavor = struct
     composite Parsetree.pdatum_of_ddatum Datatree.ddatum_of_ndatum
 end
 
-module Datatreeflavor : Treeflavor = struct
+module Datatreeflavor : (Treeflavor with type datum = Datatree.ddatum) = struct
   open Datatree
   type datum = Datatree.ddatum
   (*
@@ -676,7 +676,7 @@ module type Zipperlib = functor (Flavor : Treeflavor) -> sig
   val walk_npos : pos:int   -> t -> t
   val walk_kval : key:datum -> t -> t
   val walk_positionals : t -> t list
-  val walk_keywordeds  : t -> (t*t) list
+  val walk_keywordeds  : t -> t list
 
   (** primitive updaters *)
 
@@ -688,10 +688,10 @@ module type Zipperlib = functor (Flavor : Treeflavor) -> sig
 
   val update_npos : pos:int   -> datum option -> t -> t
   val update_kval : key:datum -> datum option -> t -> t
-  val update_atom : atom -> t -> t
+  (* val update_atom : atom -> t -> t *)
   val update_root : datum -> t -> t
-  val update_anno : datum list -> t -> t
-end
+  (* val update_anno : datum list -> t -> t *)
+end with type datum = Flavor.datum
 
 (* TASK 2 *)
 (* module GenericZipperlib : Zipperlib = struct
@@ -699,162 +699,161 @@ end
  * end *)
 
 
-module GenericZipperlib (Flavor : Treeflavor)  = struct
-  type datum = Flavor.datum
+module GenericZipperlib = 
+  functor (Flavor : Treeflavor) ->
+  struct
+    type datum = Flavor.datum
 
-  type path_component = 
-    | PCroot of {
-        root_focused : datum;
-      }
-    | PCanno of {
-        anno_focused : datum;
-        anno_pos : int;
-      }
-    | PCnpos of {
-        npos_pos : int;
-        npos_focused : datum;
-      }
-    | PCkval of {
-        kval_key : datum;
-        kval_focused : datum;
-      }
+    type path_component = 
+      | PCroot of {
+          root_focused : datum;
+        }
+      | PCanno of {
+          anno_focused : datum;
+          anno_pos : int;
+        }
+      | PCnpos of {
+          npos_pos : int;
+          npos_focused : datum;
+        }
+      | PCkval of {
+          kval_key : datum;
+          kval_focused : datum;
+        }
 
-  (* A *stack* of path components, i.e. the 1st element is at the deepest *)
-  type t = datum * path_component list 
+    (* A *stack* of path components, i.e. the 1st element is at the deepest *)
+    type t = datum * path_component list 
 
-  let walk (d: datum): t = (d, [])
+    let walk (d: datum): t = (d, [])
 
-  let focus = function
-    | d, [] -> d
-    | _, PCroot { root_focused = d } :: _ -> d
-    | _, PCanno { anno_focused = d; _} :: _ -> d
-    | _, PCnpos { npos_focused = d; _} :: _ -> d
-    | _, PCkval { kval_focused = d; _} :: _ -> d
+    let focus : t -> datum = function
+      | d, [] -> d
+      | _, PCroot { root_focused = d } :: _ -> d
+      | _, PCanno { anno_focused = d; _} :: _ -> d
+      | _, PCnpos { npos_focused = d; _} :: _ -> d
+      | _, PCkval { kval_focused = d; _} :: _ -> d
 
-  let walk_root ((d, path) as z: t): t = 
-    d, PCroot { root_focused = Flavor.root (focus z) } :: path
+    let walk_root ((d, path) as z: t): t = 
+      d, PCroot { root_focused = Flavor.root (focus z) } :: path
 
-  let walk_anno ((d, path) as z: t): t list =
-    let annos = Flavor.anno (focus z) in
-    List.mapi (fun i anno ->
-        d, PCanno { anno_focused = anno;
-                    anno_pos = i } :: path) annos
+    let walk_anno ((d, path) as z: t): t list =
+      let annos = Flavor.anno (focus z) in
+      List.mapi (fun i anno ->
+          d, PCanno { anno_focused = anno;
+                      anno_pos = i } :: path) annos
 
-  let walk_npos ~pos ((d, path) as z: t): t =
-    d, PCnpos { npos_focused = Flavor.npos ~pos (focus z);
-                npos_pos = pos } :: path
+    let walk_npos ~pos ((d, path) as z: t): t =
+      d, PCnpos { npos_focused = Flavor.npos ~pos (focus z);
+                  npos_pos = pos } :: path
 
-  let walk_kval ~key ((d, path) as z: t): t =
-    d, PCkval { kval_focused = Flavor.kval ~key (focus z);
-                kval_key = key } :: path
+    let walk_kval ~key ((d, path) as z: t): t =
+      d, PCkval { kval_focused = Flavor.kval ~key (focus z);
+                  kval_key = key } :: path
 
-  let walk_positionals ((d, path) as z: t): t list =
-    let poses = Flavor.case ~atom:(fun _ -> []) 
-                  ~form:(fun ~keyworded:_ ~positional -> positional) (focus z) in
-    List.mapi (fun i pos ->
-        d, PCnpos { npos_focused = pos;
-                    npos_pos = i } :: path) poses
-  
-  let walk_keywordeds ((d, path) as z: t): t list =
-    let poses = Flavor.case ~atom:(fun _ -> []) 
+    let walk_positionals ((d, path) as z: t): t list =
+      let poses = Flavor.case ~atom:(fun _ -> []) 
+                    ~form:(fun ~keyworded:_ ~positional -> positional) (focus z) in
+      List.mapi (fun i pos ->
+          d, PCnpos { npos_focused = pos;
+                      npos_pos = i } :: path) poses
+    
+    let walk_keywordeds ((d, path) as z: t): t list =
+      let kws = Flavor.case ~atom:(fun _ -> []) 
                   ~form:(fun ~keyworded ~positional:_ -> keyworded) (focus z) in
-    List.map (fun (k, v) ->
-        d, PCkval { kval_focused = v;
-                    kval_key = k } :: path) poses
+      List.map (fun (k, v) ->
+          d, PCkval { kval_focused = v;
+                      kval_key = k } :: path) kws
+    
+    let update_focus (nd: datum) = function
+        | d, PCroot _ :: rest ->
+           d, PCroot { root_focused = nd } :: rest
+        | d, PCanno r :: rest ->
+           d, PCanno { r with anno_focused = nd } :: rest
+        | d, PCnpos r :: rest ->
+           d, PCnpos { r with npos_focused = nd } :: rest
+        | d, PCkval r :: rest ->
+           d, PCkval { r with kval_focused = nd } :: rest
+        | _, [] -> nd, []
+    
 
-  let update_focus (nd: datum) = function
-    | d, PCroot _ :: rest ->
-       d, PCroot { root_focused = nd } :: rest
-    | d, PCanno r :: rest ->
-       d, PCanno { r with anno_focused = nd } :: rest
-    | d, PCnpos r :: rest ->
-       d, PCnpos { r with npos_focused = nd } :: rest
-    | d, PCkval r :: rest ->
-       d, PCkval { r with kval_focused = nd } :: rest
-    | _, [] -> nd, []
+    let walk_upwards (z: t): t =
+      match z with
+      | _, [] -> invalid_arg "Already at the top, can't walk upwards!"
+      | _, PCroot { root_focused = f } :: _ -> 
+         update_focus (Flavor.update_root f (focus z)) z       
+      | _, PCanno { anno_focused = f; anno_pos = pos } :: _ -> 
+         let annos = Flavor.anno (focus z) in
+         let annos' = update pos f annos in
+         let d' = Flavor.update_anno annos' (focus z) in
+         update_focus d' z
+      | _, PCnpos { npos_focused = f; npos_pos = pos } :: _ -> 
+         update_focus (Flavor.update_npos ~pos (Some f) (focus z)) z
+      | _, PCkval { kval_focused = f; kval_key = key } :: _ ->
+         update_focus (Flavor.update_kval ~key (Some f) (focus z)) z
 
-  let walk_upwards z = 
-    match z with
-    | _, [] -> invalid_arg "Already at the top, can't walk upwards!"
-    | _, PCroot { root_focused = f } :: _ -> 
-       update_focus (Flavor.update_root f (focus z)) z       
-    | _, PCanno { anno_focused = f; anno_pos = pos } :: _ -> 
-       let annos = Flavor.anno (focus z) in
-       let annos' = update pos f annos in
-       let d' = Flavor.update_anno annos' (focus z) in
-       update_focus d' z
-    | _, PCnpos { npos_focused = f; npos_pos = pos } :: _ -> 
-       update_focus (Flavor.update_npos ~pos (Some f) (focus z)) z
-    | _, PCkval { kval_focused = f; kval_key = key } :: _ ->
-       update_focus (Flavor.update_kval ~key (Some f) (focus z)) z
+    let rec unwalk = function
+      | d, [] -> d
+      | z -> unwalk (walk_upwards z)
 
-  let rec unwalk = function
-    | d, [] -> d
-    | z -> unwalk (walk_upwards z)
+    let update_node (nd: datum): t -> t = function
+      | _, [] -> nd, []
+      | d, PCroot _ :: rest -> d, PCroot {root_focused = nd} :: rest
+      | d, PCanno r :: rest -> d, PCanno {r with anno_focused = nd} :: rest
+      | d, PCnpos r :: rest -> d, PCnpos {r with npos_focused = nd} :: rest
+      | d, PCkval r :: rest -> d, PCkval {r with kval_focused = nd} :: rest
 
-  let update_node (nd: datum): t -> t = function
-    | _, [] -> nd, []
-    | d, PCroot _ :: rest -> d, PCroot {root_focused = nd} :: rest
-    | d, PCanno r :: rest -> d, PCanno {r with anno_focused = nd} :: rest
-    | d, PCnpos r :: rest -> d, PCnpos {r with npos_focused = nd} :: rest
-    | d, PCkval r :: rest -> d, PCkval {r with kval_focused = nd} :: rest
+    let _ = remove
 
-  let _ = remove
+    let remove_node (z: t) =
+      let rec loop upwards_depth = function
+        | _, [] -> failwith "Nothing to remove!"
+        | d, PCroot _ :: rest ->
+           loop (upwards_depth+1) (d, rest)
+        | d, PCanno r :: rest ->
+           let parent = focus (d, rest) in
+           let orig = Flavor.anno parent in
+           let updated = remove r.anno_pos orig in
+           let parent = Flavor.update_anno updated parent in
+           1, ((d, rest) |> update_node parent)
+        | d, PCnpos r :: rest ->
+           let parent = focus (d, rest) in
+           let parent = Flavor.update_npos ~pos:r.npos_pos None parent in
+           1, ((d, rest) |> update_node parent)
+        | d, PCkval r :: rest ->
+           let parent = focus (d, rest) in
+           let parent = Flavor.update_kval ~key:r.kval_key None parent in
+           1, ((d, rest) |> update_node parent)
+                (* | _ -> [%noimplval] *)
+      (* | d, _ :: rest -> walk_upwards (d, rest) *) in
+      loop 0 z
 
-  let get_positionals = 
-    Flavor.case ~atom:(fun a -> [a])
-      ~form:(fun ~keyworded:_ ~positional -> positional)
+    let remove_node_imm t =
+      let depth, nt = remove_node t in
+      if depth = 1
+      then nt
+      else invalid_arg "assertion (depth=1) failed for remove_node_imm"
+    
+    let update_npos ~pos new_datum z: t =
+      match new_datum with
+      | None ->
+         walk_npos ~pos z
+         |> remove_node_imm
+      | Some nd ->
+         walk_npos ~pos z
+         |> update_node nd
+         |> walk_upwards
 
-  let remove_node (z: t) =
-    let rec loop upwards_depth = function
-      | _, [] -> failwith "Nothing to remove!"
-      | d, PCroot _ :: rest ->
-         loop (upwards_depth+1) (d, rest)
-      | d, PCanno r :: rest ->
-         let parent = focus (d, rest) in
-         let orig = Flavor.anno parent in
-         let updated = remove r.anno_pos orig in
-         let parent = Flavor.update_anno updated parent in
-         1, ((d, rest) |> update_node parent)
-      | d, PCnpos r :: rest ->
-         let parent = focus (d, rest) in
-         let parent = Flavor.update_npos ~pos:r.npos_pos None parent in
-         1, ((d, rest) |> update_node parent)
-      | d, PCkval r :: rest ->
-         let parent = focus (d, rest) in
-         let parent = Flavor.update_kval ~key:r.kval_key None parent in
-         1, ((d, rest) |> update_node parent)
-      (* | _ -> [%noimplval] *)
-    (* | d, _ :: rest -> walk_upwards (d, rest) *) in
-    loop 0 z
-
-  let remove_node_imm t =
-    let depth, nt = remove_node t in
-    if depth = 1
-    then nt
-    else invalid_arg "assertion (depth=1) failed for remove_node_imm"
-  
-  let update_npos ~pos new_datum z: t =
-    match new_datum with
-    | None ->
-       walk_npos ~pos z
-       |> remove_node_imm
-    | Some nd ->
-       walk_npos ~pos z
-       |> update_node nd
-       |> walk_upwards
-
-  let update_kval ~key new_datum z: t =
-    match new_datum with
-    | None ->
-       walk_kval ~key z
-       |> remove_node_imm
-    | Some nd ->
-       walk_kval ~key z
-       |> update_node nd
-       |> walk_upwards
-  
-  let update_root nd z = 
-    walk_root z
-    |> update_node nd
+    let update_kval ~key new_datum z: t =
+      match new_datum with
+      | None ->
+         walk_kval ~key z
+         |> remove_node_imm
+      | Some nd ->
+         walk_kval ~key z
+         |> update_node nd
+         |> walk_upwards
+    
+    let update_root nd z = 
+      walk_root z
+      |> update_node nd
 end
