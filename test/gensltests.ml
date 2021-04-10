@@ -1,5 +1,6 @@
 [@@@ocaml.warning "-33"]
 
+open Genslib
 open Gensl
 open Parsing
 open Basetypes

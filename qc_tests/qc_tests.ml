@@ -1,4 +1,5 @@
 [@@@warning "-all"]
+open Genslib
 open Gensl
 open Intf
 

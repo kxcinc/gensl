@@ -1,7 +1,7 @@
 (library
  (name unit_tests)
  (inline_tests (modes js native))
- (libraries str kxclib gensl)
+ (libraries str kxclib genslib)
  (preprocess (pps kxclib.ppx ppx_inline_test))
  (flags (:standard
           -open Kxclib)))

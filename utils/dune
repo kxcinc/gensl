@@ -1,6 +1,6 @@
 (executable
  (name repl)
- (libraries kxclib gensl)
+ (libraries kxclib genslib)
  (flags (:standard
           -open Kxclib)))
 

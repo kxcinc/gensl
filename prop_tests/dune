@@ -1,6 +1,6 @@
 (test
  (name prop_tests)
- (libraries str kxclib gensl crowbar)
+ (libraries str kxclib genslib crowbar)
  (preprocess (pps kxclib.ppx))
  (flags (:standard
           -open Kxclib)))
