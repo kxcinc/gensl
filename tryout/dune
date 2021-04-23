@@ -1,0 +1,7 @@
+(executables
+ (names sedlex)
+ (libraries genslib kxclib)
+ (promote (until-clean))
+ (preprocess (pps kxclib.ppx))
+ (flags (:standard
+          -open Kxclib)))

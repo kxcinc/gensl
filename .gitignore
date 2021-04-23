@@ -3,3 +3,4 @@ _build/
 dune-project
 .idea
 _opam
+*.exe
