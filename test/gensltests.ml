@@ -28,9 +28,9 @@ let debug ?str datum =
   print_flush()
 
 let parse str =
-  let open Lexing in
+  let open Sedlexing in
   let module P = Parser.Default in
-  let lexbuf = from_string str in
+  let lexbuf = Utf8.from_string str in
   P.read_datum (pstate lexbuf)
 
 let tryparse str =

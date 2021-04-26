@@ -2,10 +2,10 @@ open Genslib
 open Gensl
 
 let parse_et_print ?fxnconv use_unparse str =
-  let open Lexing in
+  let open Sedlexing in
   let open Format in
   let module P = Parser.Default in
-  let lexbuf = from_string str in
+  let lexbuf = Utf8.from_string str in
   P.read_top (Parsing.ParserTypes.pstate lexbuf) |> function
   | Ok (datum,_) when use_unparse ->
      printf "%a" Unparse.(unparse_pdatum ?fxnconv) datum; print_cut()

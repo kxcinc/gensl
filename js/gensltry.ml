@@ -10,10 +10,10 @@ open Parsetree
 open ParserTypes
 
 let trylex str =
-  let open Lexing in
+  let open Sedlexing in
   let open Format in
   printf "we got %s\n" str;
-  let lexbuf = from_string str in
+  let lexbuf = Utf8.from_string str in
   let result = Genslex.token lexbuf in
   (match result with
    | TkNumeric(a,b) -> printf "%s.%s\n" a b
@@ -21,10 +21,10 @@ let trylex str =
   print_flush()
 
 let tryparse str =
-  let open Lexing in
+  let open Sedlexing in
   let open Format in
   let module P = Parser.Default in
-  let lexbuf = from_string str in
+  let lexbuf = Utf8.from_string str in
   P.read_datum (pstate lexbuf) |> function
   | Ok (datum,_) ->
      printf "%a\n" ParsetreePrinter.pp_pdatum datum
