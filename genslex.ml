@@ -40,7 +40,7 @@ and token buf =
   let lexeme_length = Sedlexing.lexeme_length in
   let sub_lexeme = Sedlexing.Utf8.sub_lexeme in
   let lexeme_strip head tail buf =
-    sub_lexeme buf head (lexeme_length buf - tail) in
+    sub_lexeme buf head (lexeme_length buf - tail - 1) in
   match%sedlex buf with
   | eof -> TkEof
   | Plus space -> TkSpaces (lexeme buf)
