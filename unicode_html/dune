@@ -1,0 +1,6 @@
+(executable
+ (name unicode_html)
+ (libraries kxclib sedlex.ppx)
+ (promote (until-clean))
+ (flags (:standard
+          -open Kxclib)))
