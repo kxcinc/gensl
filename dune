@@ -5,6 +5,4 @@
  (flags (:standard
           -open Kxclib -g)))
 
-;(ocamllex genslex)
-
 (vendored_dirs vendors)
