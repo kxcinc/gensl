@@ -153,26 +153,3 @@ module Lexer : Lexer with
       Ok (tok, pstate buf)
     with Failure _ -> Error [Lexing_error No_next_valid_token]
 end
-
-
-(*
-(*
-type tmptok = [`Cat | `Dog | `Space | `SomeBool | `Eof]
-[@@deriving sexp]
-*)
-
-let rec lexer buf =
-(*   let open Sedlexing.Utf8 in *)
-  match%sedlex buf with
-  | "cat" | "dog" -> `Animal (Sedlexing.Utf8.lexeme buf)
-  | "true" | "false" -> `Bool (Sedlexing.Utf8.lexeme buf)
-  | white_space -> lexer buf
-  | eof -> `Eof
-(*
-  | "dog" -> `Dog
-  | ("true" | "false") -> `SomeBoole
-  | white_space -> lexer buf
-  | eof -> `Eof
-*)
-  | _ -> failwith "invalid tok"
-*)
