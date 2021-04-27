@@ -5,10 +5,14 @@ let digit = [%sedlex.regexp? '0' .. '9']
 let octal = [%sedlex.regexp? '0' .. '7']
 let hexalphabet = [%sedlex.regexp? '0' .. '9' | 'a' .. 'f' | 'A' .. 'F']
 let hexbyte = [%sedlex.regexp? hexalphabet , hexalphabet]
+let lowercase_like = [%sedlex.regexp? '_' | '-' | '+' | '*' | '/']
+let lowercase_ext = [%sedlex.regexp? 'a' .. 'z' | lowercase_like]
 let lowercase = [%sedlex.regexp? 'a' .. 'z']
 let uppercase = [%sedlex.regexp? 'A' .. 'Z']
 let alpha = [%sedlex.regexp? lowercase | uppercase]
+let alpha_ext = [%sedlex.regexp? lowercase | uppercase | lowercase_like]
 let alphadigit = [%sedlex.regexp? alpha | digit]
+let alphadigit_ext = [%sedlex.regexp? alpha_ext | digit]
 let space = [%sedlex.regexp? ' ' | '\t' | '\n']
 let base64alphabet = [%sedlex.regexp? alphadigit | '+' | '/' | '=']
 let base64digit = [%sedlex.regexp? base64alphabet, base64alphabet, base64alphabet, base64alphabet]
@@ -45,7 +49,7 @@ and token buf =
   | eof -> TkEof
   | Plus space -> TkSpaces (lexeme buf)
   (* token TkSymbol *)
-  | lowercase, Star alphadigit -> TkSymbol (lexeme buf)
+  | lowercase_ext, Star alphadigit_ext -> TkSymbol (lexeme buf)
   (* token TkCodifiedSymbol *)
   | csymbprefix_std -> TkCodifiedSymbol (csymb_std buf)
   | csymbprefix_app -> TkCodifiedSymbol (csymb_app buf)
