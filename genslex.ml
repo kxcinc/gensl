@@ -145,8 +145,8 @@ module Lexer : Lexer with
 
   type lexer_error += No_next_valid_token
 
-  let loc _ = failwith "not implemented"
-  (* let source buf = `DirectInput (Some (loc buf).pos_fname) *)
+  let loc buf = Sedlexing.lexing_positions buf |> snd (* curr_p *)
+  let source buf = `DirectInput (Some (loc buf).pos_fname)
   let lexer buf =
     try
       let tok = token buf in
