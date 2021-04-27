@@ -1,6 +1,7 @@
 (executable
  (name repl)
  (libraries kxclib genslib)
+ (promote (until-clean))
  (flags (:standard
           -open Kxclib)))
 
