@@ -50,7 +50,7 @@ let%test "simple examples parses" =
   tryparse "hex:323454ff39";
   tryparse "b64:MjRU/zk=";
   tryparse "base64:MjRU/zk=";
-(*   tryparse "strbytes:\"24T\2559\""; *)
+  tryparse {|strbytes:\"24T\2559\"|};
   tryparse "(i like \"strings\")";
   tryparse "\"abc\"";
   tryparse "\"a\\tbc\"";

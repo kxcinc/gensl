@@ -413,7 +413,6 @@ let%test "walk and then unwalk produces same tree" =
   let open DtreeZipper in
   unwalk (walk d) = d
 
-(*
 let%test "update kval in zipper" = 
   let open Datatree in
   let open Datatreeflavor in
@@ -429,4 +428,3 @@ let%test "update kval in zipper" =
   let module DtreeZipper = GenericZipperlib(Datatreeflavor) in
   let open DtreeZipper in
   walk d' = update_kval ~key:k1 (Some v1') (walk d)
-*)
