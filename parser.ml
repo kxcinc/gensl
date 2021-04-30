@@ -113,7 +113,13 @@ module Make (Lexer : Lexer) = struct
        let kont = kont_complex_form ListForm
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
     | TkCurlyOpen, ps ->
-       let kont = kont_complex_form MapForm
+       let kont pnodes =
+         List.map (function
+             | PDatumNode pdatum ->
+               raise (Parse_error (Unexpected_positional_datum pdatum))
+             | node -> node)
+           pnodes
+         |> kont_complex_form MapForm
        in read_nodes (PickUntil (fun tok -> tok = TkCurlyClose, true), kont) ps
     | TkPoundCurlyOpen, ps ->
        let kont = kont_complex_form SetForm

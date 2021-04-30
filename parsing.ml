@@ -145,6 +145,7 @@ type parse_error +=
  | Unexpected_eof
  | Unexpected_ending_of_form
  | Unexpected_position_of_comma
+ | Unexpected_positional_datum of pdatum
  | Immature_ending_of_form of pickduty
  | No_enough_nodes_to_grab of { expected : int; available : int; }
  | Attempting_to_annotate_non_datum
