@@ -29,6 +29,6 @@ let generate_properties_html () =
 
 
 let () =
-  printf "<h1>Categories.list</h1>%s<h1>Properties.list</h1>%s"
-    (generate_categories_html ())
+  printf "<h1>Properties.list</h1>%s<h1>Categories.list</h1>%s"
     (generate_properties_html ())
+    (generate_categories_html ())
