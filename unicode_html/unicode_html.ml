@@ -16,17 +16,31 @@ let generate_html lst =
         acc1)
     lst ""
 
-let unicode_list lst =
-  List.filter (fun (k, _) -> ArgOptions.has_flag ("-" ^ k)) lst
+let extract_unicode unicode_list args =
+  List.filter_map
+    (fun arg -> match List.assoc_opt arg unicode_list with
+       | None -> None
+       | Some l -> Some (arg, l))
+    args
 
 let () =
-  let categories_list = (generate_html (unicode_list Categories.list)) in
-  let proparties_list = (generate_html (unicode_list Properties.list)) in
+  let categories_list =
+    (match ArgOptions.(get_option (StringOption "-categories")) with
+     | None -> Categories.list
+     | Some args -> extract_unicode
+                      Categories.list
+                      (String.split_on_char ',' args))
+    |> generate_html in
+  let properties_list =
+    (match ArgOptions.(get_option (StringOption "-properties")) with
+     | None -> Properties.list
+     | Some args -> extract_unicode
+                      Properties.list
+                      (String.split_on_char ',' args))
+    |> generate_html in
   if categories_list = "" then ()
   else
-    printf "<h1>Categories.list</h1>%s"
-      (generate_html (unicode_list Categories.list));
-  if proparties_list = "" then ()
+    printf "<h1>Categories.list</h1>%s" categories_list;
+  if properties_list = "" then ()
   else
-    printf "<h1>Properties.list</h1>%s"
-      (generate_html (unicode_list Properties.list))
+    printf "<h1>Properties.list</h1>%s" properties_list
