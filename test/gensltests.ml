@@ -124,4 +124,5 @@ let%test "simple examples parses" =
   tryparse "{foo => 10, bar => 20}";
   (* tryparse "{foo => 10, bar => 20,}"; *)
   badparse "{foo bar baz}";
+  tryparse "a, b, 10 20 .2, c, d";
   true

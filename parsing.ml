@@ -35,7 +35,7 @@ module ParserTypes = struct
     | TkMapsto (* for the decor-only mapsto, i.e. '->' *)
     | TkPickAll | TkGrabAll
     | TkPickK of bool*int | TkGrabK of bool*int
-    | TkPickOne of bool | TkGrabOne of bool
+    | TkPickOne | TkGrabOne
     | TkGrabPoint
     | TkKeywordIndicator
     | TkAnnoNextIndicator
@@ -69,8 +69,8 @@ module ParserTypes = struct
         TkPickK (true, 3), `String "TkPickK (true,_)";
         TkGrabK (false, 3), `String "TkGrabK (false,_)";
         TkGrabK (true, 3), `String "TkGrabK (true,_)";
-        TkPickOne true, `Same; TkPickOne false, `Same;
-        TkGrabOne true, `Same; TkGrabOne false, `Same;
+        TkPickOne, `Same; TkPickOne, `Same;
+        TkGrabOne, `Same; TkGrabOne, `Same;
         TkGrabPoint, `Same;
         TkKeywordIndicator, `Same;
         TkAnnoNextIndicator, `Same;

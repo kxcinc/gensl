@@ -138,7 +138,7 @@ module Make (Lexer : Lexer) = struct
     | TkComma, _ps | TkMapsto, _ps
     | TkPickAll, _ps | TkGrabAll, _ps
     | TkPickK _, _ps | TkGrabK _, _ps
-    | TkPickOne _, _ps | TkGrabOne _, _ps
+    | TkPickOne, _ps | TkGrabOne, _ps
     | TkGrabPoint, _ps
     | TkKeywordIndicator, _ps
     | TkAnnoPrevIndicator, _ps
@@ -158,8 +158,9 @@ module Make (Lexer : Lexer) = struct
     | TkEof, _ -> Unexpected_eof |> fail 
 
   (* XXX keyword duplication checks *)
-  and     read_nodes : picking_frame -> pstate -> pdatum presult =
-    fun (duty, kont) ps ->
+  and     read_nodes (duty, kont) ps =
+(*     : picking_frame -> pstate -> ?separate_state:separate_state -> pdatum presult = *)
+(*     fun (duty, kont, ?(sep=Keyword)) ps -> *)
     let rec loop duty buckets ps =
       let bucketsize = buckets |> List.map List.length |> List.foldl (+) 0 in
       let headbucket = List.hd buckets in
@@ -234,8 +235,8 @@ module Make (Lexer : Lexer) = struct
                    let kont = kont_simple_form_head head ~fxn:(Prefix (`PickK k, true) |> fxn) in
                    read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
                    push_datum datum ps
-                | TkPickOne have_head ->
-                   go (Some (Prefix (`PickOne, have_head))) ((TkPickK (have_head,1), ps))
+                | TkPickOne ->
+                   go (Some (Prefix (`PickOne, true))) ((TkPickK (true,1), ps))
                 | TkGrabAll ->
                    (* perform a lex ahead to determing whether there is a head-node *)
                    lex ps >>= begin function
@@ -281,8 +282,8 @@ module Make (Lexer : Lexer) = struct
                    collect k >>= fun (nodes, rbucket) ->
                    kont (List.rev nodes) >>= fun datum ->
                    loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
-                | TkGrabOne have_head ->
-                   go (Some (Postfix (`GrabOne, have_head))) (TkGrabK (have_head,1), ps)
+                | TkGrabOne ->
+                   go (Some (Postfix (`GrabOne, true))) (TkGrabK (true,1), ps)
                 | TkGrabPoint ->
                    let decor = PDecorNode { elem = GrabPoint; repr = `Direct } in
                    loop duty ([] :: (decor :: headbucket) :: restbuckets) ps

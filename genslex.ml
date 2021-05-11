@@ -118,11 +118,11 @@ and token buf =
   | ".", (Plus digit) -> TkGrabK (false, int_of_string (lexeme_strip 1 0 buf))
   | ",", (Plus digit), "." -> TkPickK (true, int_of_string (lexeme_strip 1 1 buf))
   | ".", (Plus digit), "." -> TkGrabK (true, int_of_string (lexeme_strip 1 1 buf))
-  | "," -> TkPickOne true
+  | "," -> TkPickOne
   | ",", space -> TkComma
   | ",," -> TkPickAll
   | ".." -> TkGrabAll
-  | "." -> TkGrabOne true
+  | "." -> TkGrabOne
   | ".", space -> TkGrabPoint
 
   | "=>" -> TkMapsto
