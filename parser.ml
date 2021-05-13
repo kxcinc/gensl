@@ -91,6 +91,47 @@ module Make (Lexer : Lexer) = struct
   (* NB that pstate should be used as a linear type and it needs manual unlexing *)
   (* psst: we probably want to assert linearity on pstate *)
 
+  module FormValidatorAutomaton = struct
+    type alphabet = [ `Datum | `Comma | `Keyword | `Mapsto ]
+
+    type st = track_c * track_km * int
+    and track_c = [ `Any | `CommaOnly | `NoCommaOnly ]
+    and track_km = [ `Any | `MapstoOnly | `KeywordOnly ]
+
+    let initst ps = ok ps (`Any, `Any, 0)
+    let stepst ps : alphabet -> st -> st presult = fun alphabet st ->
+      let error e = Error [e] in
+      let (c, km, ost) = st in
+      (match ost, alphabet with
+       | 0, `Datum   -> Ok 1
+       | 0, `Keyword -> Ok 2
+       | 1, `Datum   -> Ok 1
+       | 1, `Comma   -> Ok 0
+       | 1, `Keyword -> Ok 2
+       | 1, `Mapsto  -> Ok 3
+       | 2, `Datum   -> Ok 1
+       | 3, `Datum   -> Ok 4
+       | 4, `Datum   -> Ok 1
+       | 4, `Comma   -> Ok 0
+       | _ -> error Invalid_form_format) >>= fun ost' ->
+      (if ost = 1 || ost = 4 then
+         match c, alphabet with
+         | `Any, `Comma -> Ok `CommaOnly
+         | `Any, `Datum -> Ok `NoCommaOnly
+         | `CommaOnly, `Datum -> error Invalid_form_format
+         | `NoCommaOnly, `Comma -> error Invalid_form_format
+         | _ -> Ok c
+       else Ok c) >>= fun c' ->
+      (match km, alphabet with
+       | `Any, `Keyword -> Ok `KeywordOnly
+       | `Any, `Mapsto -> Ok `MapstoOnly
+       | `KeywordOnly, `Mapsto -> error Invalid_form_format
+       | `MapstoOnly, `Keyword -> error Invalid_form_format
+       | _ -> Ok km) >>= fun km' ->
+      ok ps (c', km', ost')
+  end
+
+
   let rec read_datum : pstate -> pdatum presult =
     fun ps ->
     debug_msg "entering read_datum";
@@ -157,10 +198,11 @@ module Make (Lexer : Lexer) = struct
        read_nodes (PickK 1, kont) ps
     | TkEof, _ -> Unexpected_eof |> fail 
 
+
   (* XXX keyword duplication checks *)
-  and     read_nodes (duty, kont) ps =
-(*     : picking_frame -> pstate -> ?separate_state:separate_state -> pdatum presult = *)
-(*     fun (duty, kont, ?(sep=Keyword)) ps -> *)
+  and     read_nodes : picking_frame -> pstate -> pdatum presult =
+    fun (duty, kont) ps ->
+    let module FVA = FormValidatorAutomaton in
     let rec loop duty buckets ps =
       let bucketsize = buckets |> List.map List.length |> List.foldl (+) 0 in
       let headbucket = List.hd buckets in
