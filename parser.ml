@@ -98,7 +98,7 @@ module Make (Lexer : Lexer) = struct
     and track_c = [ `Any | `CommaOnly | `NoCommaOnly ]
     and track_km = [ `Any | `MapstoOnly | `KeywordOnly ]
 
-    let initst ps = ok ps (`Any, `Any, 0)
+    let initst ps : st presult = ok ps (`Any, `Any, 0)
     let stepst ps : alphabet -> st -> st presult = fun alphabet st ->
       let error e = Error [e] in
       let (c, km, ost) = st in
@@ -203,7 +203,7 @@ module Make (Lexer : Lexer) = struct
   and     read_nodes : picking_frame -> pstate -> pdatum presult =
     fun (duty, kont) ps ->
     let module FVA = FormValidatorAutomaton in
-    let rec loop duty buckets ps =
+    let rec loop duty buckets ps st =
       let bucketsize = buckets |> List.map List.length |> List.foldl (+) 0 in
       let headbucket = List.hd buckets in
       let restbuckets = List.tl buckets in
@@ -212,7 +212,7 @@ module Make (Lexer : Lexer) = struct
       let dutyadj by = function PickK k -> PickK (k+by) | d -> d in
       let dutydec = dutyadj (-1) in
       let picktillend consuming = PickUntil (fun tok -> tok_form_ending tok, consuming) in
-      let push_node node ps = loop (dutydec duty) ((node :: headbucket) :: restbuckets) ps in
+      let push_node node ps = loop (dutydec duty) ((node :: headbucket) :: restbuckets) ps (FVA.initst ps) in
       let push_datum datum ps = push_node (PDatumNode datum) ps in
       let finish_with_kont ps = kont (List.concat buckets |> List.rev) |> lift_result ps in
       let nodatanode() =
@@ -227,7 +227,7 @@ module Make (Lexer : Lexer) = struct
         let rec loopy = function
           | (PDatumNode datum) :: rbucket ->
              kont datum >>= fun (node, ps) ->
-             loop duty ((node :: rbucket) :: restbuckets) ps
+             loop duty ((node :: rbucket) :: restbuckets) ps (FVA.initst ps)
           | (PAnnoNode _) :: rbucket -> loopy rbucket
           | _ -> Previous_datum_not_exists |> fail
         in loopy headbucket
@@ -250,7 +250,7 @@ module Make (Lexer : Lexer) = struct
             debug_token "read_nodes.go " tok;
             let fxn f = Option.value ~default:f fxn in
             match tok, duty with
-            | TkSpaces _, _ -> loop duty buckets ps
+            | TkSpaces _, _ -> loop duty buckets ps st
             | tok, PickUntil delim when fst (delim tok) ->
                finish_with_kont (if snd (delim tok) then ps else (unlex tok ps))
             | tok, PickK k when tok_form_ending tok && k > 0 ->
@@ -264,6 +264,7 @@ module Make (Lexer : Lexer) = struct
                    if nodatanode() then Unexpected_position_of_comma |> fail
                    else let node = pnode_decor CommaSeparator
                         in loop duty ((node :: headbucket) :: restbuckets) ps
+                          (st >>= fun (st', ps') -> FVA.stepst ps' `Comma st')
                 | TkPickAll ->
                    let kont = kont_simple_form ~fxn:(Prefix (`PickAll, false) |> fxn) () in
                    read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
@@ -291,6 +292,7 @@ module Make (Lexer : Lexer) = struct
                          | [] -> [PDatumNode datum] :: []
                          | hd :: tail -> (PDatumNode datum :: hd) :: tail)
                         ps
+                        (FVA.initst ps)
                    | tok, ps when tok_form_ending tok ->
                       (* no head-node *)
                       let ps = unlex tok ps in
@@ -301,6 +303,7 @@ module Make (Lexer : Lexer) = struct
                          | [] -> [PDatumNode datum] :: []
                          | hd :: tail -> (PDatumNode datum :: hd) :: tail)
                         ps
+                        (FVA.initst ps)
                    | tok, ps ->
                       (* having head-node *)
                       let ps = unlex tok ps in
@@ -312,23 +315,35 @@ module Make (Lexer : Lexer) = struct
                          | [] -> [PDatumNode datum] :: []
                          | hd :: tail -> (PDatumNode datum :: hd) :: tail)
                         ps
+                        (FVA.initst ps)
                    end
                 | TkGrabK (false, k) ->
                    let kont = kont_simple_form ~fxn:(Postfix (`GrabK k, false) |> fxn) () in
                    collect k >>= fun (nodes, rbucket) ->
                    kont (List.rev nodes) >>= fun datum ->
-                   loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
+                   loop
+                     (dutyadj (k-1) duty)
+                     ((PDatumNode datum :: rbucket) :: restbuckets)
+                     ps
+                     (FVA.initst ps)
                 | TkGrabK (true, k) ->
                    read_datum ps >>= fun (head, ps) ->
                    let kont = kont_simple_form_head ~fxn:(Postfix (`GrabK k, true) |> fxn) head in
                    collect k >>= fun (nodes, rbucket) ->
                    kont (List.rev nodes) >>= fun datum ->
-                   loop (dutyadj (k-1) duty) ((PDatumNode datum :: rbucket) :: restbuckets) ps
+                   loop
+                     (dutyadj (k-1) duty)
+                     ((PDatumNode datum :: rbucket) :: restbuckets)
+                     ps
+                     (FVA.initst ps >>= fun (st', ps') ->
+                      FVA.stepst ps' `Datum st')
                 | TkGrabOne ->
                    go (Some (Postfix (`GrabOne, true))) (TkGrabK (true,1), ps)
                 | TkGrabPoint ->
                    let decor = PDecorNode { elem = GrabPoint; repr = `Direct } in
                    loop duty ([] :: (decor :: headbucket) :: restbuckets) ps
+                     (st >>= fun (st', ps') ->
+                      FVA.stepst ps' `Datum st')
                 | TkKeywordIndicator ->
                    read_datum ps >>= fun (kw, ps) ->
                    read_datum ps >>= fun (datum, ps) ->
@@ -353,7 +368,7 @@ module Make (Lexer : Lexer) = struct
               end
           in lex ps >>= (go None)
         end
-    in loop duty [[]] ps
+    in loop duty [[]] ps (FVA.initst ps)
 
   and  read_top ps =
     let kont : pkont = function
