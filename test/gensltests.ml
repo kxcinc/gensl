@@ -120,9 +120,16 @@ let%test "simple examples parses" =
   (* badparse "#2[[1 2 5] [3 6]]";
    * badparse "#2[1 2 6]";
    * badparse "#0[3 2]"; *)
-  tryparse "{:foo 10 :bar 20}";
-  tryparse "{foo => 10, bar => 20}";
-  (* tryparse "{foo => 10, bar => 20,}"; *)
+  tryparse "(0 1 2 3)";
+  tryparse "(0, 1, 2, 3)";
+  tryparse "(0, 1, 2, 3,)";
+  badparse "(0 1, 2, 3)";
   badparse "{foo bar baz}";
-  tryparse "a, b, 10 20 .2, c, d";
+  tryparse "{:a 0 :b 1}";
+  tryparse "{:a 0, :b 1}";
+  tryparse "{:a 0, :b 1,}";
+  tryparse "{a => 0 b => 1}";
+  tryparse "{a => 0, b => 1}";
+  badparse "{:a 0 b => 1}";
+  (* tryparse "a, b, 10 20 .2, c, d"; *)
   true
