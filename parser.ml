@@ -94,14 +94,15 @@ module Make (Lexer : Lexer) = struct
   module FormValidatorAutomaton = struct
     type alphabet = [ `Datum | `Comma | `Keyword | `Mapsto ]
 
-    type st = track_c * track_km * int
+    type st = st0 kresult
+    and st0 = track_c * track_km * int
     and track_c = [ `Any | `CommaOnly | `NoCommaOnly ]
     and track_km = [ `Any | `MapstoOnly | `KeywordOnly ]
 
-    let initst : st = (`Any, `Any, 0)
-    let stepst ps : alphabet -> st -> st presult = fun alphabet st ->
+    let initst : st = Ok (`Any, `Any, 0)
+    let stepst : alphabet -> st -> st = fun alphabet st ->
       let error e = Error [e] in
-      let (c, km, ost) = st in
+      st >>= fun (c, km, ost) ->
       (match ost, alphabet with
        | 0, `Datum   -> Ok 1
        | 0, `Keyword -> Ok 2
@@ -128,7 +129,7 @@ module Make (Lexer : Lexer) = struct
        | `KeywordOnly, `Mapsto -> error Invalid_form_format
        | `MapstoOnly, `Keyword -> error Invalid_form_format
        | _ -> Ok km) >>= fun km' ->
-      ok ps (c', km', ost')
+      Ok (c', km', ost')
   end
 
 
@@ -213,44 +214,46 @@ module Make (Lexer : Lexer) = struct
       let dutyadj by = function PickK k -> PickK (k+by) | d -> d in
       let dutydec = dutyadj (-1) in
       let picktillend consuming = PickUntil (fun tok -> tok_form_ending tok, consuming) in
-      let push_node node ps st = loop (dutydec duty) ((node :: headbucket) :: restbuckets) ps st in
-      let push_datum datum ps st = push_node (PDatumNode datum) ps st in
-      let finish_with_kont ps = kont (List.concat buckets |> List.rev) |> lift_result ps in
+      let push_node node ps st new_st =
+        loop (dutydec duty) (((node, st) :: headbucket) :: restbuckets) ps new_st in
+      let push_datum datum ps st new_st = push_node (PDatumNode datum) ps st new_st in
+      let finish_with_kont ps = kont (List.concat buckets |> List.rev |> List.map fst) |> lift_result ps in
       let nodatanode() =
         let rec loop = function
           | PAnnoNode _ :: rest -> loop rest
           | PDecorNode _ :: rest -> loop rest
           | [] -> true
           | _ -> false
-        in List.concat buckets |> loop in
+        in List.concat buckets |> List.map fst |> loop in
       (* XXX there might be more corner cases that should be handled.. *)
       let with_prev_datum_node kont st =
         let rec loopy = function
-          | (PDatumNode datum) :: rbucket ->
-             kont datum >>= fun (node, ps) ->
-             loop duty ((node :: rbucket) :: restbuckets) ps st
-          | (PAnnoNode _) :: rbucket -> loopy rbucket
+          | (PDatumNode prev_datum, prev_st) :: rbucket ->
+             kont prev_datum >>= fun (node, ps) ->
+             loop duty (((node, prev_st) :: rbucket) :: restbuckets) ps st
+          | (PAnnoNode _, _) :: rbucket -> loopy rbucket
           | _ -> Previous_datum_not_exists |> fail
         in loopy headbucket
       in
       let collect k =
         let rec loop acc = function
           | 0, rest -> (List.rev acc, rest) |> kont_ok
-          | k, PDecorNode _ :: rest -> loop acc (k, rest)
-          | k, (PAnnoNode _ as node) :: rest -> loop (node :: acc) (k, rest)
-          | k, node :: rest -> loop (node :: acc) (k-1, rest)
+          | k, (PDecorNode _, _) :: rest -> loop acc (k, rest)
+          | k, ((PAnnoNode _, _) as node_st) :: rest -> loop (node_st :: acc) (k, rest)
+          | k, node_st :: rest -> loop (node_st :: acc) (k-1, rest)
           | _, [] -> No_enough_nodes_to_grab {
                           expected = k;
                           available = -1; (* XXX dummy value *)
                         } |> kont_fail
         in loop [] (k, headbucket) in
-(*
-      let (_, _, ost) = st in
-      print_int ost;
-      print_newline ();
-*)
+      let rec last_st = function
+        | [] -> FVA.initst
+        | [] :: rbuckets -> last_st rbuckets
+        | ((_, st) :: _) :: _ -> st in
       match duty with
-      | PickK duty when duty = 0 -> finish_with_kont ps
+      | PickK duty when duty = 0 ->
+        st >>= fun _ ->
+        finish_with_kont ps
       | _ -> begin
           let rec go (fxn : form_fixness option) (tok, ps) =
             debug_token "read_nodes.go " tok;
@@ -258,7 +261,8 @@ module Make (Lexer : Lexer) = struct
             match tok, duty with
             | TkSpaces _, _ -> loop duty buckets ps st
             | tok, PickUntil delim when fst (delim tok) ->
-               finish_with_kont (if snd (delim tok) then ps else (unlex tok ps))
+              st >>= fun _ ->
+              finish_with_kont (if snd (delim tok) then ps else (unlex tok ps))
             | tok, PickK k when tok_form_ending tok && k > 0 ->
                Immature_ending_of_form duty |> fail 
             | tok, PickUntil _ when tok_form_ending tok ->
@@ -268,23 +272,21 @@ module Make (Lexer : Lexer) = struct
                 | tok when tok_form_ending tok -> failwith ("panic @"^__LOC__)
                 | TkComma -> 
                    if nodatanode() then Unexpected_position_of_comma |> fail
-                   else
-                     FVA.stepst ps `Comma st >>= fun (st, ps) ->
-                     loop duty buckets ps st
+                   else let node = pnode_decor CommaSeparator in
+                     loop duty (((node, st) :: headbucket) :: restbuckets) ps (FVA.stepst `Comma st)
                 | TkPickAll ->
                    let kont = kont_simple_form ~fxn:(Prefix (`PickAll, false) |> fxn) () in
                    read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
-                   push_datum datum ps st
+                   push_datum datum ps st (FVA.stepst `Datum st)
                 | TkPickK (false, k) ->
                    let kont = kont_simple_form  ~fxn:(Prefix (`PickK k, false) |> fxn) () in
                    read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
-                   push_datum datum ps st
+                   push_datum datum ps st (FVA.stepst `Datum st)
                 | TkPickK (true, k) ->
                    read_datum ps >>= fun (head, ps) ->
                    let kont = kont_simple_form_head head ~fxn:(Prefix (`PickK k, true) |> fxn) in
-                   FVA.stepst ps `Datum st >>= fun (st, ps) ->
-                   read_nodes (PickK k, kont) ps ~st:st >>= fun (datum, ps) ->
-                   push_datum datum ps st
+                   read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
+                   push_datum datum ps st (FVA.stepst `Datum st)
                 | TkPickOne ->
                    go (Some (Prefix (`PickOne, true))) ((TkPickK (true,1), ps))
                 | TkGrabAll ->
@@ -293,72 +295,73 @@ module Make (Lexer : Lexer) = struct
                    | TkSpaces _, ps ->
                       (* no head-node *)
                       let kont = kont_simple_form ~fxn:(Postfix (`GrabAll, false) |> fxn) () in
-                      kont (List.rev headbucket) >>= fun datum ->
+                      kont (List.rev headbucket |> List.map fst) >>= fun datum ->
+                      let st = last_st restbuckets in
                       loop (dutyadj (List.length headbucket - 1) duty)
                         (match restbuckets with
-                         | [] -> [PDatumNode datum] :: []
-                         | hd :: tail -> (PDatumNode datum :: hd) :: tail)
-                        ps FVA.initst
+                         | [] -> [(PDatumNode datum, st)] :: []
+                         | hd :: tail -> ((PDatumNode datum, st) :: hd) :: tail)
+                        ps (FVA.stepst `Datum st)
                    | tok, ps when tok_form_ending tok ->
                       (* no head-node *)
                       let ps = unlex tok ps in
                       let kont = kont_simple_form ~fxn:(Postfix (`GrabAll, false) |> fxn) () in
-                      kont (List.rev headbucket) >>= fun datum ->
+                      kont (List.rev headbucket |> List.map fst) >>= fun datum ->
+                      let st = last_st restbuckets in
                       loop (dutyadj (List.length headbucket - 1) duty)
                         (match restbuckets with
-                         | [] -> [PDatumNode datum] :: []
-                         | hd :: tail -> (PDatumNode datum :: hd) :: tail)
-                        ps FVA.initst
+                         | [] -> [(PDatumNode datum, st)] :: []
+                         | hd :: tail -> ((PDatumNode datum, st) :: hd) :: tail)
+                        ps (FVA.stepst `Datum st)
                    | tok, ps ->
                       (* having head-node *)
                       let ps = unlex tok ps in
                       read_datum ps >>= fun (head, ps) ->
                       let kont = kont_simple_form_head ~fxn:(Postfix (`GrabAll, true) |> fxn) head in
-                      kont (List.rev headbucket) >>= fun datum ->
-                      FVA.stepst ps `Datum FVA.initst >>= fun (st, ps) ->
+                      kont (List.rev headbucket |> List.map fst) >>= fun datum ->
+                      let st = last_st restbuckets in
                       loop (dutyadj (List.length headbucket - 1) duty)
                         (match restbuckets with
-                         | [] -> [PDatumNode datum] :: []
-                         | hd :: tail -> (PDatumNode datum :: hd) :: tail)
-                        ps st
+                         | [] -> [(PDatumNode datum, st)] :: []
+                         | hd :: tail -> ((PDatumNode datum, st) :: hd) :: tail)
+                        ps (FVA.stepst `Datum st)
                    end
                 | TkGrabK (false, k) ->
                    let kont = kont_simple_form ~fxn:(Postfix (`GrabK k, false) |> fxn) () in
-                   collect k >>= fun (nodes, rbucket) ->
-                   kont (List.rev nodes) >>= fun datum ->
+                   collect k >>= fun (node_sts, rbucket) ->
+                   let node_sts = List.rev node_sts in
+                   kont (List.map fst node_sts) >>= fun datum ->
+                   let st = (List.hd node_sts |> snd)  in
                    loop
                      (dutyadj (k-1) duty)
-                     ((PDatumNode datum :: rbucket) :: restbuckets)
-                     ps FVA.initst
+                     (((PDatumNode datum, st) :: rbucket) :: restbuckets)
+                     ps (FVA.stepst `Datum st)
                 | TkGrabK (true, k) ->
                    read_datum ps >>= fun (head, ps) ->
                    let kont = kont_simple_form_head ~fxn:(Postfix (`GrabK k, true) |> fxn) head in
-                   collect k >>= fun (nodes, rbucket) ->
-                   kont (List.rev nodes) >>= fun datum ->
-                   FVA.stepst ps `Datum st >>= fun (st, ps) ->
+                   collect k >>= fun (node_sts, rbucket) ->
+                   let node_sts = List.rev node_sts in
+                   kont (List.map fst node_sts) >>= fun datum ->
+                   let st = (List.hd node_sts |> snd) in
                    loop
                      (dutyadj (k-1) duty)
-                     ((PDatumNode datum :: rbucket) :: restbuckets)
-                     ps st
+                     (((PDatumNode datum, st) :: rbucket) :: restbuckets)
+                     ps (FVA.stepst `Datum st)
                 | TkGrabOne ->
                    go (Some (Postfix (`GrabOne, true))) (TkGrabK (true,1), ps)
                 | TkGrabPoint ->
                    let decor = PDecorNode { elem = GrabPoint; repr = `Direct } in
-                   FVA.stepst ps `Datum st >>= fun (st, ps) ->
-                   loop duty ([] :: (decor :: headbucket) :: restbuckets) ps st
+                   loop duty ([] :: ((decor, st) :: headbucket) :: restbuckets) ps st
                 | TkKeywordIndicator ->
                    read_datum ps >>= fun (kw, ps) ->
-                   FVA.stepst ps `Keyword st >>= fun (st, ps) ->
                    read_datum ps >>= fun (datum, ps) ->
-                   FVA.stepst ps `Datum st >>= fun (st, ps) ->
                    let node = PKeywordNode (kw, datum)
-                   in push_node node ps st
+                   in push_node node ps st (FVA.stepst `Keyword st |> FVA.stepst `Datum)
                 | TkMapsto ->
-                   FVA.stepst ps `Mapsto st >>= fun (st, ps) ->
                    read_datum ps >>= fun (datum, ps) ->
-                   FVA.stepst ps `Datum st >>= fun (st, ps) ->
                    with_prev_datum_node (fun kw ->
-                       PKeywordNode (kw, datum) |> ok ps) st
+                       PKeywordNode (kw, datum) |> ok ps)
+                     (FVA.stepst `Mapsto st |> FVA.stepst `Datum)
                 | TkAnnoPrevIndicator ->
                    read_datum ps >>= fun (anno, ps) ->
                    with_prev_datum_node (fun datum ->
@@ -366,12 +369,11 @@ module Make (Lexer : Lexer) = struct
                       in PDatumNode annotated |> ok ps) st
                 | TkAnnoStandaloneIndicator ->
                    read_datum ps >>= fun (anno, ps) ->
-                   push_node (PAnnoNode anno) ps st
+                   push_node (PAnnoNode anno) ps st st
                 | _ ->
                    debug_msg (Format.sprintf "%s" __LOC__);
                    read_datum (unlex tok ps) >>= fun (datum, ps) ->
-                   FVA.stepst ps `Datum st >>= fun (st, ps) ->
-                   push_datum datum ps st
+                   push_datum datum ps st (FVA.stepst `Datum st)
               end
           in lex ps >>= (go None)
         end

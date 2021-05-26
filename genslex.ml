@@ -120,6 +120,7 @@ and token buf =
   | ".", (Plus digit), "." -> TkGrabK (true, int_of_string (lexeme_strip 1 1 buf))
   | "," -> TkPickOne
   | ",", space -> TkComma
+  | ",", eof -> TkComma
   | ",," -> TkPickAll
   | ".." -> TkGrabAll
   | "." -> TkGrabOne
