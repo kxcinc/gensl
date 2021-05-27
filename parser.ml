@@ -124,20 +124,20 @@ module Make (Lexer : Lexer) = struct
        | 3, `Datum   -> Ok 4
        | 4, `Datum   -> Ok 1
        | 4, `Comma   -> Ok 0
-       | _ -> error Invalid_form_format) >>= fun ost' ->
+       | _ -> error (Invalid_form_format `TodoMoreDetails)) >>= fun ost' ->
       (if ost = 1 || ost = 4 then
          match c, alphabet with
          | `Any, `Comma -> Ok `CommaOnly
          | `Any, `Datum -> Ok `NoCommaOnly
-         | `CommaOnly, `Datum -> error Invalid_form_format
-         | `NoCommaOnly, `Comma -> error Invalid_form_format
+         | `CommaOnly, `Datum -> error (Invalid_form_format `InconsistentCommaUsage)
+         | `NoCommaOnly, `Comma -> error (Invalid_form_format `InconsistentCommaUsage)
          | _ -> Ok c
        else Ok c) >>= fun c' ->
       (match km, alphabet with
        | `Any, `Keyword -> Ok `KeywordOnly
        | `Any, `Mapsto -> Ok `MapstoOnly
-       | `KeywordOnly, `Mapsto -> error Invalid_form_format
-       | `MapstoOnly, `Keyword -> error Invalid_form_format
+       | `KeywordOnly, `Mapsto -> error (Invalid_form_format `MixedKeywordMapsto)
+       | `MapstoOnly, `Keyword -> error (Invalid_form_format `MixedKeywordMapsto)
        | _ -> Ok km) >>= fun km' ->
       Ok (c', km', ost')
   end

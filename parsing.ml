@@ -152,7 +152,7 @@ type parse_error +=
  | Previous_datum_not_exists
  | Lexing_error of lexer_error
  | Invalid_element_in_complex_form of form_style
- | Invalid_form_format
+ | Invalid_form_format of [ `MixedKeywordMapsto | `InconsistentCommaUsage | `TodoMoreDetails ]
  | Dimentional_violation of int
  | Parse_errors of trace
 
