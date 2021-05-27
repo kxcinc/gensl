@@ -94,10 +94,20 @@ module Make (Lexer : Lexer) = struct
   module FormValidatorAutomaton = struct
     type alphabet = [ `Datum | `Comma | `Keyword | `Mapsto ]
 
+    open Sexplib.Std
+
+    type track_c = [ `Any | `CommaOnly | `NoCommaOnly ] [@@deriving sexp]
+    type track_km = [ `Any | `MapstoOnly | `KeywordOnly ] [@@deriving sexp]
+    type st0 = track_c * track_km * int [@@deriving sexp]
     type st = st0 kresult
-    and st0 = track_c * track_km * int
-    and track_c = [ `Any | `CommaOnly | `NoCommaOnly ]
-    and track_km = [ `Any | `MapstoOnly | `KeywordOnly ]
+
+    let pp_st0 ppf x = Format.(fprintf ppf "%a" Sexplib.Sexp.pp (sexp_of_st0 x))
+    let pp_result pp_elem ppf elem =
+      let printf fmt = Format.(fprintf ppf) fmt in
+      match elem with
+      | Ok elem -> printf "Ok(%a)" pp_elem elem
+      | Error _ -> printf "Error(_)"
+    let pp_st = pp_result pp_st0
 
     let initst : st = Ok (`Any, `Any, 0)
     let stepst : alphabet -> st -> st = fun alphabet st ->
@@ -209,14 +219,15 @@ module Make (Lexer : Lexer) = struct
       let bucketsize = buckets |> List.map List.length |> List.foldl (+) 0 in
       let headbucket = List.hd buckets in
       let restbuckets = List.tl buckets in
-      debug_msg (Format.asprintf "entering loop (duty=%a, buckets.len=%d, buckets[].size=%d)"
-                   pp_pickduty duty (List.length buckets) bucketsize);
+      debug_msg (Format.asprintf "entering loop (duty=%a, buckets.len=%d, buckets[].size=%d, st=%a)"
+                   pp_pickduty duty (List.length buckets) bucketsize
+                   FVA.pp_st st);
       let dutyadj by = function PickK k -> PickK (k+by) | d -> d in
       let dutydec = dutyadj (-1) in
       let picktillend consuming = PickUntil (fun tok -> tok_form_ending tok, consuming) in
-      let push_node node ps st new_st =
+      let push_node node ps new_st =
         loop (dutydec duty) (((node, st) :: headbucket) :: restbuckets) ps new_st in
-      let push_datum datum ps st new_st = push_node (PDatumNode datum) ps st new_st in
+      let push_datum datum ps new_st = push_node (PDatumNode datum) ps new_st in
       let finish_with_kont ps = kont (List.concat buckets |> List.rev |> List.map fst) |> lift_result ps in
       let nodatanode() =
         let rec loop = function
@@ -277,16 +288,16 @@ module Make (Lexer : Lexer) = struct
                 | TkPickAll ->
                    let kont = kont_simple_form ~fxn:(Prefix (`PickAll, false) |> fxn) () in
                    read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
-                   push_datum datum ps st (FVA.stepst `Datum st)
+                   push_datum datum ps (FVA.stepst `Datum st)
                 | TkPickK (false, k) ->
                    let kont = kont_simple_form  ~fxn:(Prefix (`PickK k, false) |> fxn) () in
                    read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
-                   push_datum datum ps st (FVA.stepst `Datum st)
+                   push_datum datum ps (FVA.stepst `Datum st)
                 | TkPickK (true, k) ->
                    read_datum ps >>= fun (head, ps) ->
                    let kont = kont_simple_form_head head ~fxn:(Prefix (`PickK k, true) |> fxn) in
                    read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
-                   push_datum datum ps st (FVA.stepst `Datum st)
+                   push_datum datum ps (FVA.stepst `Datum st)
                 | TkPickOne ->
                    go (Some (Prefix (`PickOne, true))) ((TkPickK (true,1), ps))
                 | TkGrabAll ->
@@ -356,7 +367,7 @@ module Make (Lexer : Lexer) = struct
                    read_datum ps >>= fun (kw, ps) ->
                    read_datum ps >>= fun (datum, ps) ->
                    let node = PKeywordNode (kw, datum)
-                   in push_node node ps st (FVA.stepst `Keyword st |> FVA.stepst `Datum)
+                   in push_node node ps (FVA.stepst `Keyword st |> FVA.stepst `Datum)
                 | TkMapsto ->
                    read_datum ps >>= fun (datum, ps) ->
                    with_prev_datum_node (fun kw ->
@@ -369,11 +380,11 @@ module Make (Lexer : Lexer) = struct
                       in PDatumNode annotated |> ok ps) st
                 | TkAnnoStandaloneIndicator ->
                    read_datum ps >>= fun (anno, ps) ->
-                   push_node (PAnnoNode anno) ps st st
+                   push_node (PAnnoNode anno) ps st
                 | _ ->
                    debug_msg (Format.sprintf "%s" __LOC__);
                    read_datum (unlex tok ps) >>= fun (datum, ps) ->
-                   push_datum datum ps st (FVA.stepst `Datum st)
+                   push_datum datum ps (FVA.stepst `Datum st)
               end
           in lex ps >>= (go None)
         end
