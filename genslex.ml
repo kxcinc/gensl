@@ -60,8 +60,7 @@ and token buf =
   | boolprefix, "true" -> TkBool true
   | boolprefix, "false" -> TkBool false
   (* token TkNumeric *)
-  | Opt ('+' | '-'), Plus digit, ((Opt '.', Star digit) | ('/', Plus digit)),
-    Opt (Plus alpha) ->
+  | Opt ('+' | '-'), Plus digit, ((Opt '.', Star digit) | ('/', Plus digit)), Opt (Plus alpha) ->
     let buf2 = Sedlexing.Utf8.from_string (lexeme buf) in
     let num = match%sedlex buf2 with
       | Opt ('+' | '-'), Plus digit, ((Opt '.', Star digit) | ('/', Plus digit)) ->
@@ -119,10 +118,11 @@ and token buf =
   | ",", (Plus digit), "." -> TkPickK (true, int_of_string (lexeme_strip 1 1 buf))
   | ".", (Plus digit), "." -> TkGrabK (true, int_of_string (lexeme_strip 1 1 buf))
   | "," -> TkPickOne
-  | ",", space -> TkComma
-  | ",", eof -> TkComma
+  | ",", (space | eof) -> TkComma
   | ",," -> TkPickAll
-  | ".." -> TkGrabAll
+  | "..", (Plus digit) -> TkGrabAll (Some (int_of_string (lexeme_strip 2 0 buf)))
+  | "..", (Plus digit), "." -> TkGrabAll (Some (int_of_string (lexeme_strip 2 1 buf)))
+  | ".." -> TkGrabAll None
   | "." -> TkGrabOne
   | ".", space -> TkGrabPoint
 

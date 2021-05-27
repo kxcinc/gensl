@@ -33,7 +33,7 @@ module ParserTypes = struct
     | TkCurlyClose
     | TkComma (* for the decor-only comma *)
     | TkMapsto (* for the decor-only mapsto, i.e. '->' *)
-    | TkPickAll | TkGrabAll
+    | TkPickAll | TkGrabAll of int option
     | TkPickK of bool*int | TkGrabK of bool*int
     | TkPickOne | TkGrabOne
     | TkGrabPoint
@@ -64,7 +64,7 @@ module ParserTypes = struct
         TkCurlyOpen, `Same;
         TkPoundCurlyOpen, `Same;
         TkCurlyClose, `Same;
-        TkPickAll, `Same; TkGrabAll, `Same;
+        TkPickAll, `Same; TkGrabAll None, `Same;
         TkPickK (false, 3), `String "TkPickK (false,_)";
         TkPickK (true, 3), `String "TkPickK (true,_)";
         TkGrabK (false, 3), `String "TkGrabK (false,_)";
@@ -153,6 +153,7 @@ type parse_error +=
  | Lexing_error of lexer_error
  | Invalid_element_in_complex_form of form_style
  | Invalid_form_format of [ `MixedKeywordMapsto | `InconsistentCommaUsage | `TodoMoreDetails ]
+ | Unmatched_graball_count of int*int
  | Dimentional_violation of int
  | Parse_errors of trace
 
