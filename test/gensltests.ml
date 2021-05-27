@@ -190,8 +190,8 @@ let%test "simple examples parses" =
   tryparse "(a => 0 b => 1 .2 :c 2 :d 3)";
   tryparse "(:a 0 :b 1 ,, c => 2 d => 3)";
   tryparse "(a => 0 b => 1 ,, :c 2 :d 3)";
-  tryparse "(:a 0 :b 1 ,1 c => 2 :d 3)";
-  tryparse "(a => 0 b => 1 ,1 :c 2 d => 3)";
-  tryparse "(:a 0 :b 1 ,2 c => 2 d => 3)";
-  tryparse "(a => 0 b => 1 ,2 :c 2 :d 3)";
+  tryparse "(:a 0 :b 1 ,2 c => 2 blank :d 3)";
+  tryparse "(a => 0 b => 1 ,2 :c 2 blank d => 3)";
+  tryparse "(:a 0 :b 1 ,3 c => 2 d => 3 blank)";
+  tryparse "(a => 0 b => 1 ,3 :c 2 :d 3 blank)";
   true
