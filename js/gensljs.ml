@@ -27,9 +27,9 @@ let tryparse str =
   let open Format in
   let module P = Parser.Default in
   let lexbuf = Utf8.from_string str in
-  P.read_datum (pstate lexbuf) |> function
-  | Ok (datum,_) ->
-     asprintf "%a" ParsetreePrinter.pp_pdatum datum
+  P.read_top (pstate lexbuf) |> function
+  | Ok (toplevel,_) ->
+     asprintf "%a" ParsetreePrinter.pp_toplevel toplevel
      |> Js.string |> Js.Unsafe.coerce
   | e -> ("parse error", e) |> Json.output |> Js.Unsafe.coerce
   
