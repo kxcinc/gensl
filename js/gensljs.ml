@@ -32,7 +32,7 @@ let tryparse str =
      asprintf "%a" ParsetreePrinter.pp_toplevel toplevel
      |> Js.string |> Js.Unsafe.coerce
   | e -> ("parse error", e) |> Json.output |> Js.Unsafe.coerce
-  
+
 let () =
   let api = (object%js
                method trylex str = str |> Js.to_string |> trylex
@@ -57,3 +57,22 @@ let () =
   then tryparse Sys.argv.(1) |> debug
   else ()
 
+let display_text text =
+  let app_main = Dom_html.getElementById "app-main" in
+  let text = Dom_html.document##createTextNode (Js.string text) in
+  let paragraph = Dom_html.createP Dom_html.document in
+  Dom.appendChild paragraph text;
+  Dom.appendChild app_main paragraph
+
+let display_prompt prompt =
+  let app_main = Dom_html.getElementById "app-main" in
+  let prompt = Dom_html.document##createTextNode (Js.string prompt) in
+  let input_field = Dom_html.createInput Dom_html.document in
+  let paragraph  = Dom_html.createP Dom_html.document in
+  Dom.appendChild paragraph prompt;
+  Dom.appendChild paragraph input_field;
+  Dom.appendChild app_main paragraph
+
+let () =
+  display_text "history";
+  display_prompt "gensl> "
