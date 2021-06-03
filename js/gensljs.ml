@@ -57,22 +57,26 @@ let () =
   then tryparse Sys.argv.(1) |> debug
   else ()
 
-let display_text text =
-  let app_main = Dom_html.getElementById "app-main" in
-  let text = Dom_html.document##createTextNode (Js.string text) in
+let add_text text =
+  let repl_history = Dom_html.getElementById "repl-history" in
   let paragraph = Dom_html.createP Dom_html.document in
-  Dom.appendChild paragraph text;
-  Dom.appendChild app_main paragraph
-
-let display_prompt prompt =
-  let app_main = Dom_html.getElementById "app-main" in
-  let prompt = Dom_html.document##createTextNode (Js.string prompt) in
-  let input_field = Dom_html.createInput Dom_html.document in
-  let paragraph  = Dom_html.createP Dom_html.document in
-  Dom.appendChild paragraph prompt;
-  Dom.appendChild paragraph input_field;
-  Dom.appendChild app_main paragraph
+  Dom.appendChild paragraph (Dom_html.document##createTextNode text);
+  Dom.appendChild repl_history paragraph
 
 let () =
-  display_text "history";
-  display_prompt "gensl> "
+  let input_field = Dom_html.getElementById "input-field" in
+  let keypress = Dom.Event.make "keypress" in
+  let _ =
+    Dom.addEventListener
+      input_field
+      keypress
+      (Dom.handler (fun e ->
+           if e##.key == Js.string "Enter" then
+             begin
+               add_text (Js.string "hello");
+               Js._true
+             end
+           else
+             Js._false))
+      Js._true in
+  ()
