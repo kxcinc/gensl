@@ -71,6 +71,9 @@ let clear_input () =
   Js.Unsafe.set input_field "value" ""
 
 let () =
+  let open Sedlexing in
+  let open Format in
+  let module P = Parser.Default in
   let input_field = Dom_html.getElementById "input-field" in
   let keypress = Dom.Event.make "keypress" in
   let _ =
@@ -80,7 +83,19 @@ let () =
       (Dom.handler (fun e ->
            if e##.key == Js.string "Enter" then
              begin
-               add_texts [(Js.string "gensl> "); (Js.Unsafe.get input_field "value")];
+               let input_value = Js.Unsafe.get input_field "value" in
+               let parsed_value =
+                 (Js.to_string input_value)
+                 |> Utf8.from_string
+                 |> pstate
+                 |> P.read_top
+                 |> (function
+                     | Ok (toplevel, _) ->
+                       asprintf "%a" ParsetreePrinter.pp_toplevel toplevel
+                       |> Js.string |> Js.Unsafe.coerce
+                     | e -> ("parse error", e) |> Json.output |> Js.Unsafe.coerce) in
+               add_texts [(Js.string "gensl> "); input_value];
+               add_texts [parsed_value];
                clear_input ();
                Js._false
              end
