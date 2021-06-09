@@ -57,11 +57,18 @@ let () =
   then tryparse Sys.argv.(1) |> debug
   else ()
 
-let add_text text =
+let add_texts texts =
   let repl_history = Dom_html.getElementById "repl-history" in
   let paragraph = Dom_html.createP Dom_html.document in
-  Dom.appendChild paragraph (Dom_html.document##createTextNode text);
+  List.iter
+    (fun text ->
+       Dom.appendChild paragraph (Dom_html.document##createTextNode text))
+    texts;
   Dom.appendChild repl_history paragraph
+
+let clear_input () =
+  let input_field = Dom_html.getElementById "input-field" in
+  Js.Unsafe.set input_field "value" ""
 
 let () =
   let input_field = Dom_html.getElementById "input-field" in
@@ -73,10 +80,11 @@ let () =
       (Dom.handler (fun e ->
            if e##.key == Js.string "Enter" then
              begin
-               add_text (Js.string "hello");
-               Js._true
+               add_texts [(Js.string "gensl> "); (Js.Unsafe.get input_field "value")];
+               clear_input ();
+               Js._false
              end
            else
-             Js._false))
+             Js._true))
       Js._true in
   ()
