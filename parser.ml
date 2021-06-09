@@ -168,12 +168,12 @@ module Make (Lexer : Lexer) = struct
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
     | TkCurlyOpen, ps ->
        let kont pnodes =
-         List.map (function
-             | PDatumNode pdatum ->
-               raise (Parse_error (Unexpected_positional_datum pdatum))
-             | node -> node)
-           pnodes
-         |> kont_complex_form MapForm
+         (foldr (fun node acc -> match node, acc with
+              | _, (Error _ as acc) -> acc
+              | PDatumNode pdatum, Ok _ -> Unexpected_positional_datum pdatum |> kont_fail
+              | node, Ok acc -> kont_ok (node :: acc))
+             pnodes (Ok [])) >>= fun pnodes ->
+         kont_complex_form MapForm pnodes
        in read_nodes (PickUntil (fun tok -> tok = TkCurlyClose, true), kont) ps
     | TkPoundCurlyOpen, ps ->
        let kont = kont_complex_form SetForm
