@@ -84,16 +84,7 @@ let () =
            if e##.key == Js.string "Enter" then
              begin
                let input_value = Js.Unsafe.get input_field "value" in
-               let parsed_value =
-                 (Js.to_string input_value)
-                 |> Utf8.from_string
-                 |> pstate
-                 |> P.read_top
-                 |> (function
-                     | Ok (toplevel, _) ->
-                       asprintf "%a" ParsetreePrinter.pp_toplevel toplevel
-                       |> Js.string |> Js.Unsafe.coerce
-                     | e -> ("parse error", e) |> Json.output |> Js.Unsafe.coerce) in
+               let parsed_value = tryparse (Js.to_string input_value) in
                add_texts [(Js.string "gensl> "); input_value];
                add_texts [parsed_value];
                clear_input ();
