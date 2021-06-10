@@ -11,6 +11,20 @@ open Parsetree
 
 open ParserTypes
 
+(* roadmap to MVP
+ - [ ] make index.html accessible from the Internet via GitHub Pages
+
+ - [ ] displayed error message (in red)
+ - [ ] modify unparse for CommaSeparator and remove the prefix space
+ - [ ] repl result as if #conv infix then #unparse
+ - [ ] change color of prompt
+ - [ ] use monospace font
+ - [ ] make input area larger and support multi-line input
+ *)
+
+let unparse_for_repl expr =
+  Format.asprintf "%a" Unparse.(unparse_pdatum ~fxnconv:`Infix) expr
+
 let trylex str =
   let open Sedlexing in
   let open Format in
@@ -29,7 +43,7 @@ let tryparse str =
   let lexbuf = Utf8.from_string str in
   P.read_top (pstate lexbuf) |> function
   | Ok (toplevel,_) ->
-     asprintf "%a" ParsetreePrinter.pp_toplevel toplevel
+     unparse_for_repl toplevel
      |> Js.string |> Js.Unsafe.coerce
   | e -> ("parse error", e) |> Json.output |> Js.Unsafe.coerce
 
