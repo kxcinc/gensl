@@ -14,7 +14,7 @@ open ParserTypes
 (* roadmap to MVP
  - [ ] make index.html accessible from the Internet via GitHub Pages
 
- - [x] displayed error message (in red)
+ - [ ] displayed error message (in red)
  - [x] modify unparse for CommaSeparator and remove the prefix space
  - [ ] repl result as if #conv infix then #unparse
  - [x] change color of prompt
@@ -24,6 +24,13 @@ open ParserTypes
 
 let unparse_for_repl expr =
   Format.asprintf "%a" Unparse.(unparse_pdatum ~fxnconv:`Infix) expr
+
+let unparse_errors_for_repl errors =
+  foldr (fun e acc ->
+      (Format.asprintf "%a" Unparse.(unparse_pnode ~fxnconv:`Infix) (pnode_decor (ParseError e)))
+      ^ acc)
+    errors ""
+
 
 let trylex str =
   let open Sedlexing in
@@ -41,11 +48,14 @@ let tryparse str =
   let open Format in
   let module P = Parser.Default in
   let lexbuf = Utf8.from_string str in
-  P.read_top (pstate lexbuf) |> function
-  | Ok (toplevel,_) ->
-     Ok (unparse_for_repl toplevel
-         |> Js.string |> Js.Unsafe.coerce)
-  | e -> Error (("parse error", e) |> Json.output |> Js.Unsafe.coerce)
+  P.read_top (pstate lexbuf) |> (function
+  | Ok (toplevel, _)->  Ok (unparse_for_repl toplevel)
+  | Error errors -> Error (unparse_errors_for_repl errors))
+
+let tryparse_console str =
+  match tryparse str with
+  | Ok s -> s
+  | Error s -> s
 
 let () =
   let api = (object%js
@@ -121,8 +131,8 @@ let () =
                let parsed_value = tryparse (Js.to_string input_value) in
                add_input input_value;
                (match parsed_value with
-                | Ok output -> add_output output
-                | Error e -> add_error e);
+                | Ok output -> add_output (Js.string output)
+                | Error error -> add_error (Js.string error));
                clear_input ();
                Js._false
              end
