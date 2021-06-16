@@ -14,7 +14,7 @@ open ParserTypes
 (* roadmap to MVP
  - [ ] make index.html accessible from the Internet via GitHub Pages
 
- - [ ] displayed error message (in red)
+ - [x] displayed error message (in red)
  - [x] modify unparse for CommaSeparator and remove the prefix space
  - [ ] repl result as if #conv infix then #unparse
  - [x] change color of prompt
@@ -43,9 +43,9 @@ let tryparse str =
   let lexbuf = Utf8.from_string str in
   P.read_top (pstate lexbuf) |> function
   | Ok (toplevel,_) ->
-     unparse_for_repl toplevel
-     |> Js.string |> Js.Unsafe.coerce
-  | e -> ("parse error", e) |> Json.output |> Js.Unsafe.coerce
+     Ok (unparse_for_repl toplevel
+         |> Js.string |> Js.Unsafe.coerce)
+  | e -> Error (("parse error", e) |> Json.output |> Js.Unsafe.coerce)
 
 let () =
   let api = (object%js
@@ -71,8 +71,10 @@ let () =
   then tryparse Sys.argv.(1) |> debug
   else ()
 
-let add_paragraph paragraph =
+let add_paragraph ?(color="black") paragraph =
   let repl_history = Dom_html.getElementById "repl-history" in
+  (if color = "" then ()
+   else Js.Unsafe.set paragraph "style" ("color:" ^ color));
   Dom.appendChild repl_history paragraph
 
 let add_input text =
@@ -91,6 +93,12 @@ let add_output text =
   let textnode = Dom_html.document##createTextNode text in
   Dom.appendChild p textnode;
   add_paragraph p
+
+let add_error text =
+  let p = Dom_html.createP Dom_html.document in
+  let textnode = Dom_html.document##createTextNode text in
+  Dom.appendChild p textnode;
+  add_paragraph ~color:"red" p
 
 let clear_input () =
   let input_field = Dom_html.getElementById "input-field" in
@@ -112,7 +120,9 @@ let () =
                let input_value = Js.Unsafe.get input_field "value" in
                let parsed_value = tryparse (Js.to_string input_value) in
                add_input input_value;
-               add_output parsed_value;
+               (match parsed_value with
+                | Ok output -> add_output output
+                | Error e -> add_error e);
                clear_input ();
                Js._false
              end
