@@ -18,7 +18,7 @@ open ParserTypes
  - [x] modify unparse for CommaSeparator and remove the prefix space
  - [ ] repl result as if #conv infix then #unparse
  - [x] change color of prompt
- - [ ] use monospace font
+ - [x] use monospace font
  - [ ] make input area larger and support multi-line input
  *)
 
