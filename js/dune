@@ -19,3 +19,9 @@
 (rule
   (targets gensljs.js)
   (action (run %{bin:js_of_ocaml} --pretty --source-map %{dep:gensljs.bc} -o %{targets})))
+
+(rule
+ (target built-site.tar)
+ (mode (promote (until-clean)))
+ (action (run tar cf %{target} %{read-lines:site-files.txt}))
+ (deps index.html (file gensljs.js)))
