@@ -390,6 +390,27 @@ module Parsetree = struct
 
   type parse_error = ..
 
+  module ParseError = struct
+    type t = parse_error
+    type pp_handler = Format.formatter -> t -> bool
+    (** when a handler being invoked like [handler ppf x],
+        it should return false if it cannot handle [x],
+        or otherwise pretty-print [x] into [ppf] and return true *)
+
+    open struct
+      let pp_registry : (Format.formatter -> t -> bool) list ref = ref []
+    end
+
+    let pp ppf x =
+      !pp_registry
+    |> List.find (fun handler ->
+          handler ppf x)
+    |> ignore
+
+    let register_parse_error_pp_handler : pp_handler -> unit =
+      fun handler -> refappend handler pp_registry
+  end
+
   (* syntax_mode and form_style should only concern forms *)
   type form_fixness =
     | Infix
