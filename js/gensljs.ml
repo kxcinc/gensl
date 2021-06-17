@@ -25,11 +25,40 @@ open ParserTypes
 let unparse_for_repl expr =
   Format.asprintf "%a" Unparse.(unparse_pdatum ~fxnconv:`Infix) expr
 
-let unparse_errors_for_repl errors =
-  foldr (fun e acc ->
-      (Format.asprintf "%a" Unparse.(unparse_pnode ~fxnconv:`Infix) (pnode_decor (ParseError e)))
-      ^ acc)
-    errors ""
+let rec unparse_error_for_repl = function
+  | Unexpected_eof ->
+    "unexpected EOF"
+  | Unexpected_ending_of_form ->
+    "unexpected ending of form"
+  | Unexpected_position_of_comma ->
+    "unexpected position of comma"
+  | Unexpected_positional_datum datum ->
+    Format.asprintf "unexpected positional datum: %a" Unparse.(unparse_pdatum ~fxnconv:`Infix) datum
+  | Immature_ending_of_form duty ->
+     Format.asprintf "immature ending of form: %a" pp_pickduty duty
+  | No_enough_nodes_to_grab _ ->
+    "no enough nodes to grab"
+  | Attempting_to_annotate_non_datum ->
+    "attempting to annotate non datum"
+  | Previous_datum_not_exists ->
+    "previous datum not exists"
+  | Lexing_error _ ->
+    "lexing error: no next valid token"
+  | Invalid_element_in_complex_form _ ->
+    "invalid element in complex form"
+  | Invalid_form_format `MixedKeywordMapsto ->
+    "invalid form format: mixed keyword mapsto"
+  | Invalid_form_format `InconsistentCommaUsage ->
+    "invalid form format: inconsistent comma usage"
+  | Invalid_form_format _ ->
+    "invalid form format"
+  | Unmatched_graball_count _ ->
+    "unmatched graball count"
+  | Dimentional_violation _ ->
+    "dimentional violation"
+  | Parse_errors errors ->
+    foldr (fun e acc -> unparse_error_for_repl e ^ "\n" ^ acc) errors ""
+  | _ -> "unknown parse error"
 
 
 let trylex str =
@@ -48,9 +77,9 @@ let tryparse str =
   let open Format in
   let module P = Parser.Default in
   let lexbuf = Utf8.from_string str in
-  P.read_top (pstate lexbuf) |> (function
+  P.read_top (pstate lexbuf) |> function
   | Ok (toplevel, _)->  Ok (unparse_for_repl toplevel)
-  | Error errors -> Error (unparse_errors_for_repl errors))
+  | Error errors -> Error (unparse_error_for_repl (Parse_errors errors))
 
 let tryparse_console str =
   match tryparse str with
