@@ -11,7 +11,8 @@ module Basetypes = struct
       | `Desc | `Hash | `Uuid | `Version   (* 3..6 *)
       | `List | `Vector | `Set | `Map      (* 7..10 *)
       | `Int | `Uint | `Float | `Timestamp (* 11..14 *)
-      (* 15..19: reserved *)
+      | `Rel (* 15 *)
+      (* 16..19: reserved *)
       | `Appsymb01 | `Appsymb02 | `Appsymb03 | `Appsymb04 (* 20..23 *)
       | `Appsymb05 | `Appsymb06 | `Appsymb07 | `Appsymb08 (* 24..27 *)
       | `Appsymb09 | `Appsymb10 | `Appsymb11 | `Appsymb12 (* 28..31 *) ]
@@ -39,6 +40,7 @@ module Basetypes = struct
     | `Desc -> "desc" | `Hash -> "hash" | `Uuid -> "uuid" | `Version -> "version"
     | `List -> "list" | `Vector -> "vector" | `Set -> "set" | `Map -> "map"
     | `Int -> "int" | `Uint -> "uint" | `Float -> "float" | `Timestamp -> "timestamp"
+    | `Rel -> "rel"
     | `Appsymb01 -> "app01" | `Appsymb02 -> "app02" | `Appsymb03 -> "app03" | `Appsymb04 -> "app04"
     | `Appsymb05 -> "app05" | `Appsymb06 -> "app06" | `Appsymb07 -> "app07" | `Appsymb08 -> "app08"
     | `Appsymb09 -> "app09" | `Appsymb10 -> "app10" | `Appsymb11 -> "app11" | `Appsymb12 -> "app12"
@@ -48,6 +50,7 @@ module Basetypes = struct
     | "desc" -> `Desc | "hash" -> `Hash | "uuid" -> `Uuid | "version" -> `Version
     | "list" -> `List | "vector" -> `Vector | "set" -> `Set | "map" -> `Map
     | "int" -> `Int | "uint" -> `Uint | "float" -> `Float | "timestamp" -> `Timestamp
+    | "rel" -> `Rel
     | "app01" -> `Appsymb01 | "app02" -> `Appsymb02 | "app03" -> `Appsymb03 | "app04" -> `Appsymb04
     | "app05" -> `Appsymb05 | "app06" -> `Appsymb06 | "app07" -> `Appsymb07 | "app08" -> `Appsymb08
     | "app09" -> `Appsymb09 | "app10" -> `Appsymb10 | "app11" -> `Appsymb11 | "app12" -> `Appsymb12
@@ -63,6 +66,7 @@ module Basetypes = struct
         `Desc; `Hash; `Uuid; `Version;
         `List; `Vector; `Set; `Map;
         `Int; `Uint; `Float; `Timestamp;
+        `Rel;
       ] in
     let (kapp, application) = 20, [
      `Appsymb01; `Appsymb02; `Appsymb03; `Appsymb04;
