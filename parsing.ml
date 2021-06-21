@@ -26,7 +26,8 @@ module ParserTypes = struct
     | TkParenOpen
     | TkParenClose
     | TkBracketOpen
-    | TkPoundBracketOpen of int option
+    | TkPoundBracketOpen
+    | TkAmpersandBracketOpen of int option
     | TkBracketClose
     | TkCurlyOpen
     | TkPoundCurlyOpen
@@ -56,10 +57,11 @@ module ParserTypes = struct
         TkParenOpen, `Same;
         TkParenClose, `Same;
         TkBracketOpen, `Same;
-        TkPoundBracketOpen None, `Same;
-        TkPoundBracketOpen (Some 0), `Same;
-        TkPoundBracketOpen (Some 1), `Same;
-        TkPoundBracketOpen (Some 2), `String "TkPoundBracketOpen (Some >1)";
+        TkPoundBracketOpen, `Same;
+        TkAmpersandBracketOpen None, `Same;
+        TkAmpersandBracketOpen (Some 0), `Same;
+        TkAmpersandBracketOpen (Some 1), `Same;
+        TkAmpersandBracketOpen (Some 2), `String "TkAmpersandBracketOpen (Some >1)";
         TkBracketClose, `Same;
         TkCurlyOpen, `Same;
         TkPoundCurlyOpen, `Same;

@@ -92,7 +92,7 @@ and unparse_pform ?fxnconv ppf : pform -> unit =
       let pohead = pohead' "" in
       let (nodes, fxn) = match style, fxnconv with
         | _, None -> nodes, fxn
-        | (ToplevelForm | ListForm | VectorForm _ | MapForm | SetForm | RelForm), _ -> nodes, fxn
+        | (ToplevelForm | ListForm | VectorForm _ | MapForm | SetForm | RelForm _), _ -> nodes, fxn
         | SimpleForm, Some `Infix -> cleaned, Infix
         | SimpleForm, Some `Prefix -> cleaned,
                                       if singlepos() then Prefix (`PickK 1, false)
@@ -112,12 +112,12 @@ and unparse_pform ?fxnconv ppf : pform -> unit =
          pmore (unparse_pnode ?fxnconv) ppf nodes;
          pcut ppf; pstr ppf ")"
       | ListForm, Infix ->
-         pstr ppf "["; pcut ppf;
+         pstr ppf "#["; pcut ppf;
          pmore (unparse_pnode ?fxnconv) ppf nodes;
          pcut ppf; pstr ppf "]"
       | VectorForm k, Infix ->
          let k = Option.(map string_of_int k |> value ~default:"") in
-         fprintf ppf "#%s[" k; pcut ppf;
+         fprintf ppf "&%s[" k; pcut ppf;
          pmore (unparse_pnode ?fxnconv) ppf nodes;
          pcut ppf; pstr ppf "]"
       | MapForm, Infix ->
@@ -128,6 +128,11 @@ and unparse_pform ?fxnconv ppf : pform -> unit =
          pstr ppf "#{"; pcut ppf;
          pmore (unparse_pnode ?fxnconv) ppf nodes;
          pcut ppf; pstr ppf "}"
+      | RelForm name, Infix ->
+        pstr ppf "["; pcut ppf;
+        pstr ppf !name; psp ppf;
+        pmore (unparse_pnode ?fxnconv) ppf nodes;
+        pcut ppf; pstr ppf "]"
       | (ToplevelForm | ListForm | VectorForm _ | MapForm | SetForm ), _ ->
          failwith ("panic: "^__LOC__)
       | SimpleForm, Prefix (`PickAll, wh) ->
@@ -154,7 +159,7 @@ and unparse_pform ?fxnconv ppf : pform -> unit =
          let (head, nodes) = headnodes wh in
          pmore (unparse_pnode ?fxnconv) ppf nodes; psp ppf;
          pstr ppf "."; pint ppf k; pohead' "." head;
-      | RelForm, _ -> failwith "unimplemented"
+      | RelForm _, _ -> failwith "unimplemented"
     end
 
 and unparse_pnode ?fxnconv ppf : pnode -> unit = function

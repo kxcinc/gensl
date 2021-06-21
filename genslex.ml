@@ -107,10 +107,11 @@ and token buf =
   | '{' -> TkCurlyOpen
   | '}' -> TkCurlyClose
 
-  | '#', (Opt (Plus digit)), '[' ->
+  | "#[" -> TkPoundBracketOpen
+  | '&', (Opt (Plus digit)), '[' ->
     let k = (lexeme_strip 1 1 buf) in
     let k_opt = if k = "" then None else Some k in
-    TkPoundBracketOpen (Option.map int_of_string k_opt)
+    TkAmpersandBracketOpen (Option.map int_of_string k_opt)
   | "#{" -> TkPoundCurlyOpen
 
   | ",", (Plus digit) -> TkPickK (false, int_of_string (lexeme_strip 1 0 buf))

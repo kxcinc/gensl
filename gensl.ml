@@ -427,7 +427,7 @@ module Parsetree = struct
     | VectorForm of int option  (** &k[ .. ], k could be omitted *)
     | MapForm                   (**   { .. } *)
     | SetForm                   (**  #{ .. } *)
-    | RelForm                   (**   [ .. ] *)
+    | RelForm of string ref      (**   [ .. ] *)
   [@@deriving sexp]
 
   (** decor elements, who exists in the wirestring but
@@ -539,7 +539,7 @@ module Parsetree = struct
           in
           let nodes = List.fold_left process' [] nodes |> List.rev in
           DForm (append_head `Set nodes)
-        | RelForm -> failwith "unimplemented"
+        | RelForm _ -> failwith "RelForm is not yet supported!"
       end
     | PAnnotated {
         elem = {

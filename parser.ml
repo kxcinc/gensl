@@ -164,7 +164,13 @@ module Make (Lexer : Lexer) = struct
        in read_nodes (PickUntil (fun tok -> tok = TkParenClose, true), kont) ps
     (* XXX restrictions in complex forms *)
     | TkBracketOpen, ps ->
-       let kont = kont_complex_form RelForm
+       lex ps >>= (function
+       | TkSymbol name, ps' ->
+         let kont = kont_complex_form (RelForm (ref name)) in
+         read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps'
+       | _ -> Invalid_element_in_complex_form ListForm |> fail)
+    | TkPoundBracketOpen, ps ->
+       let kont = kont_complex_form ListForm
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
     | TkCurlyOpen, ps ->
        let kont pnodes =
@@ -179,11 +185,11 @@ module Make (Lexer : Lexer) = struct
        let kont = kont_complex_form SetForm
        in read_nodes (PickUntil (fun tok -> tok = TkCurlyClose, true), kont) ps
     (* XXX dimentional check *)
-    | TkPoundBracketOpen (None as k), ps
-    | TkPoundBracketOpen (Some 1 as k), ps ->
+    | TkAmpersandBracketOpen (None as k), ps
+    | TkAmpersandBracketOpen (Some 1 as k), ps ->
        let kont = kont_complex_form (VectorForm k)
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
-    | TkPoundBracketOpen (Some k), ps ->
+    | TkAmpersandBracketOpen (Some k), ps ->
        let kont = kont_complex_form_vector_k (Some k)
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
     | TkParenClose, _ps
