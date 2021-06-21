@@ -164,7 +164,7 @@ module Make (Lexer : Lexer) = struct
        in read_nodes (PickUntil (fun tok -> tok = TkParenClose, true), kont) ps
     (* XXX restrictions in complex forms *)
     | TkBracketOpen, ps ->
-       let kont = kont_complex_form ListForm
+       let kont = kont_complex_form RelForm
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps
     | TkCurlyOpen, ps ->
        let kont pnodes =

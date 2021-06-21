@@ -423,10 +423,11 @@ module Parsetree = struct
   type form_style =
     | ToplevelForm
     | SimpleForm                (**   ( .. ) *)
-    | ListForm                  (**   [ .. ] *)
-    | VectorForm of int option  (** #k[ .. ], k could be omitted *)
+    | ListForm                  (**  #[ .. ] *)
+    | VectorForm of int option  (** &k[ .. ], k could be omitted *)
     | MapForm                   (**   { .. } *)
     | SetForm                   (**  #{ .. } *)
+    | RelForm                   (**   [ .. ] *)
   [@@deriving sexp]
 
   (** decor elements, who exists in the wirestring but
@@ -538,6 +539,7 @@ module Parsetree = struct
           in
           let nodes = List.fold_left process' [] nodes |> List.rev in
           DForm (append_head `Set nodes)
+        | RelForm -> failwith "unimplemented"
       end
     | PAnnotated {
         elem = {

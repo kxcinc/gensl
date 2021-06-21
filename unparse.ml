@@ -92,7 +92,7 @@ and unparse_pform ?fxnconv ppf : pform -> unit =
       let pohead = pohead' "" in
       let (nodes, fxn) = match style, fxnconv with
         | _, None -> nodes, fxn
-        | (ToplevelForm | ListForm | VectorForm _ | MapForm | SetForm ), _ -> nodes, fxn
+        | (ToplevelForm | ListForm | VectorForm _ | MapForm | SetForm | RelForm), _ -> nodes, fxn
         | SimpleForm, Some `Infix -> cleaned, Infix
         | SimpleForm, Some `Prefix -> cleaned,
                                       if singlepos() then Prefix (`PickK 1, false)
@@ -154,6 +154,7 @@ and unparse_pform ?fxnconv ppf : pform -> unit =
          let (head, nodes) = headnodes wh in
          pmore (unparse_pnode ?fxnconv) ppf nodes; psp ppf;
          pstr ppf "."; pint ppf k; pohead' "." head;
+      | RelForm, _ -> failwith "unimplemented"
     end
 
 and unparse_pnode ?fxnconv ppf : pnode -> unit = function
