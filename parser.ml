@@ -165,10 +165,15 @@ module Make (Lexer : Lexer) = struct
     (* XXX restrictions in complex forms *)
     | TkBracketOpen, ps ->
        lex ps >>= (function
-       | TkSymbol name, ps' ->
-         let kont = kont_complex_form (RelForm (ref name)) in
-         read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps'
-       | _ -> Invalid_element_in_complex_form ListForm |> fail)
+          | TkSymbol name, ps' ->
+            let kont = kont_complex_form (RelForm (ref name)) in
+            read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps'
+          | _ -> Invalid_element_in_complex_form ListForm |> fail)
+    | TkHat, ps ->
+      lex ps >>= (function
+          | TkSymbol name, ps' ->
+            pdatum_form [] (RelForm (ref name)) Infix `Direct |> ok ps'
+          | _ -> Invalid_element_in_complex_form ListForm |> fail)
     | TkPoundBracketOpen, ps ->
        let kont = kont_complex_form ListForm
        in read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps

@@ -30,6 +30,7 @@ let rec csymb_std buf = match%sedlex buf with
  | "desc" -> `Desc | "hash" -> `Hash | "uuid" -> `Uuid | "version" -> `Version
  | "list" -> `List | "vector" -> `Vector | "set" -> `Set | "map" -> `Map
  | "int" -> `Int | "uint" -> `Uint | "float" -> `Float | "timestamp" -> `Timestamp
+ | "rel" -> `Rel
  | _ -> failwith "invalid tok"
 
 and csymb_app buf = match%sedlex buf with
@@ -126,6 +127,7 @@ and token buf =
   | ".." -> TkGrabAll None
   | "." -> TkGrabOne
   | ".", space -> TkGrabPoint
+  | "^" -> TkHat
 
   | "=>" -> TkMapsto
 
