@@ -272,6 +272,30 @@ module Make (Lexer : Lexer) = struct
           let rec go (fxn : form_fixness option) (tok, ps) =
             debug_token "read_nodes.go " tok;
             let fxn f = Option.value ~default:f fxn in
+(*
+            let fxn f b = Option.value ~default:(match f with
+                | `PickAll -> Prefix (`PickAll, b)
+                | `PickOne -> Prefix (`PickOne, b)
+                | `PickK n -> Prefix (`PickK n, b)
+                | `GrabAll -> Postfix (`GrabAll, b)
+                | `GrabOne -> Postfix (`GrabOne, b)
+                | `GrabK n -> Postfix (`GrabK n, b)) fxn in
+*)
+(*
+            let with_kont_ps ps f =
+              lex ps >>= begin function
+                | TkSpaces _, ps ->
+                  (kont_simple_form ~fxn:(fxn f false) (), ps)
+                | TkHat name, ps ->
+                  (kont_complex_form (RelForm (ref name)), ps)
+                | tok, ps when tok_form_ending tok ->
+                  (kont_simple_form ~fxn:(fxn f false) (), unlex tok ps)
+                | tok, ps ->
+                  let ps = unlex tok ps in
+                  read_datum ps >>= fun (head, ps) ->
+                  (kont_simple_form_head ~fxn:(fxn f true) (), unlex tok ps)
+              end in
+*)
             match tok, duty with
             | TkSpaces _, _ -> loop duty buckets ps st
             | tok, PickUntil delim when fst (delim tok) ->
@@ -384,16 +408,30 @@ module Make (Lexer : Lexer) = struct
                      (((PDatumNode datum, st) :: rbucket) :: restbuckets)
                      ps (FVA.stepst `Datum st)
                 | TkGrabK (true, k) ->
-                   read_datum ps >>= fun (head, ps) ->
-                   let kont = kont_simple_form_head ~fxn:(Postfix (`GrabK k, true) |> fxn) head in
-                   collect k >>= fun (node_sts, rbucket) ->
-                   let node_sts = List.rev node_sts in
-                   kont (List.map fst node_sts) >>= fun datum ->
-                   let st = (List.hd node_sts |> snd) in
-                   loop
-                     (dutyadj (k-1) duty)
-                     (((PDatumNode datum, st) :: rbucket) :: restbuckets)
-                     ps (FVA.stepst `Datum st)
+                   lex ps >>= begin function
+                     | TkHat name, ps ->
+                        let kont = kont_complex_form (RelForm (ref name)) in
+                        collect k >>= fun (node_sts, rbucket) ->
+                        let node_sts = List.rev node_sts in
+                        kont (List.map fst node_sts) >>= fun datum ->
+                        let st = (List.hd node_sts |> snd) in
+                        loop
+                          (dutyadj (k-1) duty)
+                          (((PDatumNode datum, st) :: rbucket) :: restbuckets)
+                          ps (FVA.stepst `Datum st)
+                     | tok, ps ->
+                        let ps = unlex tok ps in
+                        read_datum ps >>= fun (head, ps) ->
+                        let kont = kont_simple_form_head ~fxn:(Postfix (`GrabK k, true) |> fxn) head in
+                        collect k >>= fun (node_sts, rbucket) ->
+                        let node_sts = List.rev node_sts in
+                        kont (List.map fst node_sts) >>= fun datum ->
+                        let st = (List.hd node_sts |> snd) in
+                        loop
+                          (dutyadj (k-1) duty)
+                          (((PDatumNode datum, st) :: rbucket) :: restbuckets)
+                          ps (FVA.stepst `Datum st)
+                   end
                 | TkGrabOne ->
                    go (Some (Postfix (`GrabOne, true))) (TkGrabK (true,1), ps)
                 | TkGrabPoint ->
