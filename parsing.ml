@@ -38,7 +38,7 @@ module ParserTypes = struct
     | TkPickK of bool*int | TkGrabK of bool*int
     | TkPickOne | TkGrabOne
     | TkGrabPoint
-    | TkHat of string
+    | TkHat
     | TkKeywordIndicator
     | TkAnnoNextIndicator
     | TkAnnoPrevIndicator
@@ -158,6 +158,7 @@ type parse_error +=
  | Invalid_form_format of [ `MixedKeywordMapsto | `InconsistentCommaUsage | `TodoMoreDetails ]
  | Unmatched_graball_count of int*int
  | Dimentional_violation of int
+ | No_relname
  | Parse_errors of trace
 
 let () =

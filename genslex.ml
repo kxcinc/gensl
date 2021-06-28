@@ -127,7 +127,7 @@ and token buf =
   | ".." -> TkGrabAll None
   | "." -> TkGrabOne
   | ".", space -> TkGrabPoint
-  | "^", lowercase_ext, Star alphadigit_ext -> TkHat (lexeme_strip 1 0 buf)
+  | "^" -> TkHat
 
   | "=>" -> TkMapsto
 

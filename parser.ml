@@ -200,7 +200,7 @@ module Make (Lexer : Lexer) = struct
     | TkPickK _, _ps | TkGrabK _, _ps
     | TkPickOne, _ps | TkGrabOne, _ps
     | TkGrabPoint, _ps
-    | TkHat _, _ps
+    | TkHat, _ps
     | TkKeywordIndicator, _ps
     | TkAnnoPrevIndicator, _ps
     | TkAnnoStandaloneIndicator, _ps
@@ -313,32 +313,42 @@ module Make (Lexer : Lexer) = struct
                    else let node = pnode_decor CommaSeparator in
                      loop duty (((node, st) :: headbucket) :: restbuckets) ps (FVA.stepst `Comma st)
                 | TkPickAll ->
-                   lex ps >>= (function
-                      | TkHat name, ps ->
-                         let kont = kont_complex_form (RelForm (ref name)) in
-                         read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
-                         push_datum datum ps (FVA.stepst `Datum st)
+                   lex ps >>= begin function
+                      | TkHat, ps ->
+                         lex ps >>= begin function
+                         | TkSymbol name, ps ->
+                            let kont = kont_complex_form (RelForm (ref name)) in
+                            read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
+                            push_datum datum ps (FVA.stepst `Datum st)
+                         | _ -> No_relname |> fail
+                         end
                       | tok, ps ->
                          let ps = unlex tok ps in
                          let kont = kont_simple_form ~fxn:(Prefix (`PickAll, false) |> fxn) () in
                          read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
-                         push_datum datum ps (FVA.stepst `Datum st))
+                         push_datum datum ps (FVA.stepst `Datum st)
+                   end
                 | TkPickK (false, k) ->
                    let kont = kont_simple_form  ~fxn:(Prefix (`PickK k, false) |> fxn) () in
                    read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
                    push_datum datum ps (FVA.stepst `Datum st)
                 | TkPickK (true, k) ->
-                   lex ps >>= (function
-                      | TkHat name, ps ->
-                         let kont = kont_complex_form (RelForm (ref name)) in
-                         read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
-                         push_datum datum ps (FVA.stepst `Datum st)
+                   lex ps >>= begin function
+                      | TkHat, ps ->
+                         lex ps >>= begin function
+                           | TkSymbol name, ps ->
+                              let kont = kont_complex_form (RelForm (ref name)) in
+                              read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
+                              push_datum datum ps (FVA.stepst `Datum st)
+                           | _ -> No_relname |> fail
+                         end
                       | tok, ps ->
                          let ps = unlex tok ps in
                          read_datum ps >>= fun (head, ps) ->
                          let kont = kont_simple_form_head head ~fxn:(Prefix (`PickK k, true) |> fxn) in
                          read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
-                         push_datum datum ps (FVA.stepst `Datum st))
+                         push_datum datum ps (FVA.stepst `Datum st)
+                   end
                 | TkPickOne ->
                    go (Some (Prefix (`PickOne, true))) ((TkPickK (true,1), ps))
                 | TkGrabAll count ->
@@ -373,23 +383,27 @@ module Make (Lexer : Lexer) = struct
                        (* no head-node *)
                        let ps = unlex tok ps in
                        process ps
-                     | TkHat name, ps ->
-                       let kont = kont_complex_form (RelForm (ref name)) in
-                       let nodes = List.rev headbucket |> List.map fst in
-                       let rec last_st = function
-                         | [] -> FVA.initst
-                         | [] :: rbuckets -> last_st rbuckets
-                         | ((_, st) :: _) :: _ -> st in
-                       let st = last_st restbuckets in
-                       kont nodes >>= fun datum -> begin match count with
-                         | Some check_length when List.length nodes <> check_length ->
-                           Unmatched_graball_count (List.length nodes, check_length) |> fail
-                         | _ ->
-                           loop (dutyadj (List.length headbucket - 1) duty)
-                             (match restbuckets with
-                              | [] -> [(PDatumNode datum, st)] :: []
-                              | hd :: tail -> ((PDatumNode datum, st) :: hd) :: tail)
-                             ps (FVA.stepst `Datum st)
+                     | TkHat, ps ->
+                       lex ps >>= begin function
+                         | TkSymbol name, ps ->
+                            let kont = kont_complex_form (RelForm (ref name)) in
+                            let nodes = List.rev headbucket |> List.map fst in
+                            let rec last_st = function
+                              | [] -> FVA.initst
+                              | [] :: rbuckets -> last_st rbuckets
+                              | ((_, st) :: _) :: _ -> st in
+                            let st = last_st restbuckets in
+                            kont nodes >>= fun datum -> begin match count with
+                              | Some check_length when List.length nodes <> check_length ->
+                                Unmatched_graball_count (List.length nodes, check_length) |> fail
+                              | _ ->
+                                loop (dutyadj (List.length headbucket - 1) duty)
+                                  (match restbuckets with
+                                   | [] -> [(PDatumNode datum, st)] :: []
+                                   | hd :: tail -> ((PDatumNode datum, st) :: hd) :: tail)
+                                  ps (FVA.stepst `Datum st)
+                            end
+                         | _ -> No_relname |> fail
                        end
                      | tok, ps ->
                        (* having head-node *)
@@ -409,16 +423,20 @@ module Make (Lexer : Lexer) = struct
                      ps (FVA.stepst `Datum st)
                 | TkGrabK (true, k) ->
                    lex ps >>= begin function
-                     | TkHat name, ps ->
-                        let kont = kont_complex_form (RelForm (ref name)) in
-                        collect k >>= fun (node_sts, rbucket) ->
-                        let node_sts = List.rev node_sts in
-                        kont (List.map fst node_sts) >>= fun datum ->
-                        let st = (List.hd node_sts |> snd) in
-                        loop
-                          (dutyadj (k-1) duty)
-                          (((PDatumNode datum, st) :: rbucket) :: restbuckets)
-                          ps (FVA.stepst `Datum st)
+                     | TkHat, ps ->
+                        lex ps >>= begin function
+                          | TkSymbol name, ps ->
+                             let kont = kont_complex_form (RelForm (ref name)) in
+                             collect k >>= fun (node_sts, rbucket) ->
+                             let node_sts = List.rev node_sts in
+                             kont (List.map fst node_sts) >>= fun datum ->
+                             let st = (List.hd node_sts |> snd) in
+                             loop
+                               (dutyadj (k-1) duty)
+                               (((PDatumNode datum, st) :: rbucket) :: restbuckets)
+                               ps (FVA.stepst `Datum st)
+                          | _ -> No_relname |> fail
+                        end
                      | tok, ps ->
                         let ps = unlex tok ps in
                         read_datum ps >>= fun (head, ps) ->
@@ -460,7 +478,8 @@ module Make (Lexer : Lexer) = struct
                    read_datum (unlex tok ps) >>= fun (datum, ps) ->
                    push_datum datum ps (FVA.stepst `Datum st)
               end
-          in lex ps >>= (go None)
+          in
+          lex ps >>= (go None)
         end
     in loop duty [[]] ps st
 
