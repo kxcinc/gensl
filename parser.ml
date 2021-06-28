@@ -299,8 +299,8 @@ module Make (Lexer : Lexer) = struct
             match tok, duty with
             | TkSpaces _, _ -> loop duty buckets ps st
             | tok, PickUntil delim when fst (delim tok) ->
-              st >>= fun _ ->
-              finish_with_kont (if snd (delim tok) then ps else (unlex tok ps))
+               st >>= fun _ ->
+               finish_with_kont (if snd (delim tok) then ps else (unlex tok ps))
             | tok, PickK k when tok_form_ending tok && k > 0 ->
                Immature_ending_of_form duty |> fail 
             | tok, PickUntil _ when tok_form_ending tok ->
@@ -314,17 +314,17 @@ module Make (Lexer : Lexer) = struct
                      loop duty (((node, st) :: headbucket) :: restbuckets) ps (FVA.stepst `Comma st)
                 | TkPickAll ->
                    lex ps >>= begin function
-                      | TkHat, ps ->
-                         lex ps >>= begin function
-                         | TkSymbol name, ps ->
-                            let kont = kont_complex_form (RelForm (ref name)) in
-                            read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
-                            push_datum datum ps (FVA.stepst `Datum st)
-                         | _ -> No_relname |> fail
-                         end
-                      | tok, ps ->
-                         let ps = unlex tok ps in
-                         let kont = kont_simple_form ~fxn:(Prefix (`PickAll, false) |> fxn) () in
+                     | TkHat, ps ->
+                        lex ps >>= begin function
+                        | TkSymbol name, ps ->
+                           let kont = kont_complex_form (RelForm (ref name)) in
+                           read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
+                           push_datum datum ps (FVA.stepst `Datum st)
+                        | _ -> No_relname |> fail
+                        end
+                     | tok, ps ->
+                        let ps = unlex tok ps in
+                        let kont = kont_simple_form ~fxn:(Prefix (`PickAll, false) |> fxn) () in
                          read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
                          push_datum datum ps (FVA.stepst `Datum st)
                    end
@@ -353,12 +353,12 @@ module Make (Lexer : Lexer) = struct
                    go (Some (Prefix (`PickOne, true))) ((TkPickK (true,1), ps))
                 | TkGrabAll count ->
                    (* perform a lex ahead to determing whether there is a head-node *)
-                   let process ?(headopt=None) ps =
-                     let kont =
-                       match headopt with
-                       | None -> kont_simple_form ~fxn:(Postfix (`GrabAll, false) |> fxn) ()
-                       | Some head -> kont_simple_form_head ~fxn:(Postfix (`GrabAll, true) |> fxn) head
-                     in
+                   let kont_form_head = function
+                     | None ->
+                        kont_simple_form ~fxn:(Postfix (`GrabAll, false) |> fxn) ()
+                     | Some head ->
+                        kont_simple_form_head ~fxn:(Postfix (`GrabAll, true) |> fxn) head in
+                   let process kont ps =
                      let nodes = List.rev headbucket |> List.map fst in
                      let rec last_st = function
                        | [] -> FVA.initst
@@ -378,38 +378,23 @@ module Make (Lexer : Lexer) = struct
                    lex ps >>= begin function
                      | TkSpaces _, ps ->
                        (* no head-node *)
-                       process ps
+                       process (kont_form_head None) ps
                      | tok, ps when tok_form_ending tok ->
                        (* no head-node *)
                        let ps = unlex tok ps in
-                       process ps
+                       process (kont_form_head None) ps
                      | TkHat, ps ->
                        lex ps >>= begin function
                          | TkSymbol name, ps ->
                             let kont = kont_complex_form (RelForm (ref name)) in
-                            let nodes = List.rev headbucket |> List.map fst in
-                            let rec last_st = function
-                              | [] -> FVA.initst
-                              | [] :: rbuckets -> last_st rbuckets
-                              | ((_, st) :: _) :: _ -> st in
-                            let st = last_st restbuckets in
-                            kont nodes >>= fun datum -> begin match count with
-                              | Some check_length when List.length nodes <> check_length ->
-                                Unmatched_graball_count (List.length nodes, check_length) |> fail
-                              | _ ->
-                                loop (dutyadj (List.length headbucket - 1) duty)
-                                  (match restbuckets with
-                                   | [] -> [(PDatumNode datum, st)] :: []
-                                   | hd :: tail -> ((PDatumNode datum, st) :: hd) :: tail)
-                                  ps (FVA.stepst `Datum st)
-                            end
+                            process kont ps
                          | _ -> No_relname |> fail
                        end
                      | tok, ps ->
                        (* having head-node *)
                        let ps = unlex tok ps in
                        read_datum ps >>= fun (head, ps) ->
-                       process ps ~headopt:(Some head)
+                       process (kont_form_head (Some head)) ps
                    end
                 | TkGrabK (false, k) ->
                    let kont = kont_simple_form ~fxn:(Postfix (`GrabK k, false) |> fxn) () in

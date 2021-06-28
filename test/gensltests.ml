@@ -194,6 +194,13 @@ let%test "simple examples parses" =
   tryparse "(a => 0 b => 1 ,2 :c 2 blank d => 3)";
   tryparse "(:a 0 :b 1 ,3 c => 2 d => 3 blank)";
   tryparse "(a => 0 b => 1 ,3 :c 2 :d 3 blank)";
+  tryparse "[rel 0 1 2]";
+  tryparse "(0 1 2 ..^rel)";
+  tryparse "(0 . 1 2 ..^rel)";
+  tryparse "(0 1 2 .2.^rel)";
+  tryparse "(,,^rel 0 1 2)";
+  tryparse "(,2.^rel 0 1 2)";
+
   tryparse "(..0 0 1 2)";
   tryparse "(0 ..1 1 2)";
   tryparse "(0 1 ..2 2)";
@@ -202,11 +209,4 @@ let%test "simple examples parses" =
   tryparse "(0 . 1 ..1 2 3)";
   tryparse "(0 . 1 2 ..2 3)";
   tryparse "(0 . 1 2 3 ..3)";
-
-  tryparse "[rel 0 1 2]";
-  tryparse "(0 1 2 ..^rel)";
-  tryparse "(0 . 1 2 ..^rel)";
-  tryparse "(0 1 2 .2.^rel)";
-  tryparse "(,,^rel 0 1 2)";
-  tryparse "(,2.^rel 0 1 2)";
   true
