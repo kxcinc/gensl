@@ -110,9 +110,9 @@ and token buf =
 
   | "#[" -> TkPoundBracketOpen
   | '&', (Opt (Plus digit)), '[' ->
-    let k = (lexeme_strip 1 1 buf) in
-    let k_opt = if k = "" then None else Some k in
-    TkAmpersandBracketOpen (Option.map int_of_string k_opt)
+     let k = (lexeme_strip 1 1 buf) in
+     let k_opt = if k = "" then None else Some k in
+     TkAmpersandBracketOpen (Option.map int_of_string k_opt)
   | "#{" -> TkPoundCurlyOpen
 
   | ",", (Plus digit) -> TkPickK (false, int_of_string (lexeme_strip 1 0 buf))
@@ -137,8 +137,15 @@ and token buf =
   | "@" -> TkAnnoStandaloneIndicator
 
   (* reader macro *)
-  | "t:" -> TkBool true
-  | "f:" -> TkBool false
+  | lowercase_ext, Star alphadigit_ext, ":", (Opt (lowercase_ext, Star alphadigit_ext)) ->
+     let buf2 = Sedlexing.Utf8.from_string (lexeme buf) in
+     let prefix = match%sedlex buf2 with
+       | lowercase_ext, Star alphadigit_ext, ":" -> lexeme buf2
+       | _ -> failwith "impossible pattern unmatch: TkReaderMacro" in
+     let macro = match%sedlex buf2 with
+       | Opt (lowercase_ext, Star alphadigit_ext) -> lexeme buf2
+       | _ -> failwith "impossible pattern unmatch: TkReaderMacro" in
+     TkReaderMacro (prefix, macro)
 
   | _ -> failwith "invalid tok"
 

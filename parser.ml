@@ -142,8 +142,33 @@ module Make (Lexer : Lexer) = struct
       Ok (c', km', ost')
   end
 
-
   module FVA = FormValidatorAutomaton
+
+  (* API to invoke gensle reader from macro impl *)
+  module type SourceStream = sig
+    type t
+    val take : int -> t Seq.t
+    val peek : int -> t Seq.t
+    (* future work : val loc : unit -> loc *)
+
+    val next_datum : unit -> pdatum option
+    val next_nodes : pickduty -> pnode list
+  end
+
+  type 'x source_stream = (module SourceStream with type t = 'x)
+
+  module type ReaderMacroUnicode = sig
+    val advertized_prefix : string
+    val process : Uchar.t source_stream -> pnode list
+  end
+
+  module type ReaderMacroByte = sig
+    val advertized_prefix : string
+    val process : char source_stream -> pnode list
+  end
+
+  type unicode_reader_macro = (module ReaderMacroUnicode)
+  type byte_reader_macro = (module ReaderMacroByte)
 
   let rec read_datum : pstate -> pdatum presult =
     fun ps ->
@@ -216,6 +241,8 @@ module Make (Lexer : Lexer) = struct
          | _ -> failwith ("panic: " ^ __LOC__)
        in
        read_nodes (PickK 1, kont) ps
+    | TkReaderMacro (_prefix, _macro), _ps ->
+       failwith "unimplemented"
     | TkEof, _ -> Unexpected_eof |> fail 
 
 

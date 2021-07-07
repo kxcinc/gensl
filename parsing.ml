@@ -43,6 +43,7 @@ module ParserTypes = struct
     | TkAnnoNextIndicator
     | TkAnnoPrevIndicator
     | TkAnnoStandaloneIndicator
+    | TkReaderMacro of string*string
   [@@deriving sexp]
 
   let pp_token_class ppf (cls : token -> bool) =
