@@ -136,6 +136,10 @@ and token buf =
   | "@<" -> TkAnnoPrevIndicator
   | "@" -> TkAnnoStandaloneIndicator
 
+  (* reader macro *)
+  | "t:" -> TkBool true
+  | "f:" -> TkBool false
+
   | _ -> failwith "invalid tok"
 
 module Lexer : Lexer with
