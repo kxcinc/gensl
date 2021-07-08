@@ -158,12 +158,12 @@ module Make (Lexer : Lexer) = struct
   type 'x source_stream = (module SourceStream with type t = 'x)
 
   module type ReaderMacroUnicode = sig
-    val advertized_prefix : string
+    val advertised_prefix : string
     val process : Uchar.t source_stream -> pnode list
   end
 
   module type ReaderMacroByte = sig
-    val advertized_prefix : string
+    val advertised_prefix : string
     val process : char source_stream -> pnode list
   end
 
@@ -191,7 +191,7 @@ module Make (Lexer : Lexer) = struct
     | TkBracketOpen, ps ->
        lex ps >>= (function
           | TkSymbol name, ps' ->
-            let kont = kont_complex_form (RelForm (ref name)) in
+            let kont = kont_complex_form (RelForm name) in
             read_nodes (PickUntil (fun tok -> tok = TkBracketClose, true), kont) ps'
           | _ -> Invalid_element_in_complex_form ListForm |> fail)
     | TkPoundBracketOpen, ps ->
@@ -225,7 +225,6 @@ module Make (Lexer : Lexer) = struct
     | TkPickK _, _ps | TkGrabK _, _ps
     | TkPickOne, _ps | TkGrabOne, _ps
     | TkGrabPoint, _ps
-    | TkHat, _ps
     | TkKeywordIndicator, _ps
     | TkAnnoPrevIndicator, _ps
     | TkAnnoStandaloneIndicator, _ps
@@ -241,7 +240,16 @@ module Make (Lexer : Lexer) = struct
          | _ -> failwith ("panic: " ^ __LOC__)
        in
        read_nodes (PickK 1, kont) ps
-    | TkReaderMacro (_prefix, _macro), _ps ->
+    | TkHat name, ps ->
+       let kont = kont_simple_form () in
+       let rel_node =
+         PDatumNode (PAtom {elem = (CodifiedSymbolAtom `Rel);
+                            repr = `Phantom}) in
+       let name_node =
+         PDatumNode (PAtom {elem = (SymbolAtom name);
+                            repr = `Direct}) in
+       kont [rel_node; name_node] |> lift_result ps
+    | TkReaderMacro (_prefix, _process), _ps ->
        failwith "unimplemented"
     | TkEof, _ -> Unexpected_eof |> fail 
 
@@ -340,42 +348,18 @@ module Make (Lexer : Lexer) = struct
                    else let node = pnode_decor CommaSeparator in
                      loop duty (((node, st) :: headbucket) :: restbuckets) ps (FVA.stepst `Comma st)
                 | TkPickAll ->
-                   lex ps >>= begin function
-                     | TkHat, ps ->
-                        lex ps >>= begin function
-                        | TkSymbol name, ps ->
-                           let kont = kont_complex_form (RelForm (ref name)) in
-                           read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
-                           push_datum datum ps (FVA.stepst `Datum st)
-                        | _ -> No_relname |> fail
-                        end
-                     | tok, ps ->
-                        let ps = unlex tok ps in
-                        let kont = kont_simple_form ~fxn:(Prefix (`PickAll, false) |> fxn) () in
-                         read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
-                         push_datum datum ps (FVA.stepst `Datum st)
-                   end
+                   let kont = kont_simple_form ~fxn:(Prefix (`PickAll, false) |> fxn) () in
+                   read_nodes (picktillend false, kont) ps >>= fun (datum, ps) ->
+                   push_datum datum ps (FVA.stepst `Datum st)
                 | TkPickK (false, k) ->
                    let kont = kont_simple_form  ~fxn:(Prefix (`PickK k, false) |> fxn) () in
                    read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
                    push_datum datum ps (FVA.stepst `Datum st)
                 | TkPickK (true, k) ->
-                   lex ps >>= begin function
-                      | TkHat, ps ->
-                         lex ps >>= begin function
-                           | TkSymbol name, ps ->
-                              let kont = kont_complex_form (RelForm (ref name)) in
-                              read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
-                              push_datum datum ps (FVA.stepst `Datum st)
-                           | _ -> No_relname |> fail
-                         end
-                      | tok, ps ->
-                         let ps = unlex tok ps in
-                         read_datum ps >>= fun (head, ps) ->
-                         let kont = kont_simple_form_head head ~fxn:(Prefix (`PickK k, true) |> fxn) in
-                         read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
-                         push_datum datum ps (FVA.stepst `Datum st)
-                   end
+                   read_datum ps >>= fun (head, ps) ->
+                   let kont = kont_simple_form_head head ~fxn:(Prefix (`PickK k, true) |> fxn) in
+                   read_nodes (PickK k, kont) ps >>= fun (datum, ps) ->
+                   push_datum datum ps (FVA.stepst `Datum st)
                 | TkPickOne ->
                    go (Some (Prefix (`PickOne, true))) ((TkPickK (true,1), ps))
                 | TkGrabAll count ->
@@ -410,13 +394,6 @@ module Make (Lexer : Lexer) = struct
                        (* no head-node *)
                        let ps = unlex tok ps in
                        process (kont_form_head None) ps
-                     | TkHat, ps ->
-                       lex ps >>= begin function
-                         | TkSymbol name, ps ->
-                            let kont = kont_complex_form (RelForm (ref name)) in
-                            process kont ps
-                         | _ -> No_relname |> fail
-                       end
                      | tok, ps ->
                        (* having head-node *)
                        let ps = unlex tok ps in
@@ -434,34 +411,16 @@ module Make (Lexer : Lexer) = struct
                      (((PDatumNode datum, st) :: rbucket) :: restbuckets)
                      ps (FVA.stepst `Datum st)
                 | TkGrabK (true, k) ->
-                   lex ps >>= begin function
-                     | TkHat, ps ->
-                        lex ps >>= begin function
-                          | TkSymbol name, ps ->
-                             let kont = kont_complex_form (RelForm (ref name)) in
-                             collect k >>= fun (node_sts, rbucket) ->
-                             let node_sts = List.rev node_sts in
-                             kont (List.map fst node_sts) >>= fun datum ->
-                             let st = (List.hd node_sts |> snd) in
-                             loop
-                               (dutyadj (k-1) duty)
-                               (((PDatumNode datum, st) :: rbucket) :: restbuckets)
-                               ps (FVA.stepst `Datum st)
-                          | _ -> No_relname |> fail
-                        end
-                     | tok, ps ->
-                        let ps = unlex tok ps in
-                        read_datum ps >>= fun (head, ps) ->
-                        let kont = kont_simple_form_head ~fxn:(Postfix (`GrabK k, true) |> fxn) head in
-                        collect k >>= fun (node_sts, rbucket) ->
-                        let node_sts = List.rev node_sts in
-                        kont (List.map fst node_sts) >>= fun datum ->
-                        let st = (List.hd node_sts |> snd) in
-                        loop
-                          (dutyadj (k-1) duty)
-                          (((PDatumNode datum, st) :: rbucket) :: restbuckets)
-                          ps (FVA.stepst `Datum st)
-                   end
+                   read_datum ps >>= fun (head, ps) ->
+                   let kont = kont_simple_form_head ~fxn:(Postfix (`GrabK k, true) |> fxn) head in
+                   collect k >>= fun (node_sts, rbucket) ->
+                   let node_sts = List.rev node_sts in
+                   kont (List.map fst node_sts) >>= fun datum ->
+                   let st = (List.hd node_sts |> snd) in
+                   loop
+                     (dutyadj (k-1) duty)
+                     (((PDatumNode datum, st) :: rbucket) :: restbuckets)
+                     ps (FVA.stepst `Datum st)
                 | TkGrabOne ->
                    go (Some (Postfix (`GrabOne, true))) (TkGrabK (true,1), ps)
                 | TkGrabPoint ->

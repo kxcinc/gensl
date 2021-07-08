@@ -38,7 +38,7 @@ module ParserTypes = struct
     | TkPickK of bool*int | TkGrabK of bool*int
     | TkPickOne | TkGrabOne
     | TkGrabPoint
-    | TkHat
+    | TkHat of string
     | TkKeywordIndicator
     | TkAnnoNextIndicator
     | TkAnnoPrevIndicator

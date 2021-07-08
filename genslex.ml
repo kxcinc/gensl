@@ -127,7 +127,7 @@ and token buf =
   | ".." -> TkGrabAll None
   | "." -> TkGrabOne
   | ".", space -> TkGrabPoint
-  | "^" -> TkHat
+  | "^", lowercase_ext, Star alphadigit_ext -> TkHat (lexeme_strip 1 0 buf)
 
   | "=>" -> TkMapsto
 
@@ -142,10 +142,10 @@ and token buf =
      let prefix = match%sedlex buf2 with
        | lowercase_ext, Star alphadigit_ext, ":" -> lexeme buf2
        | _ -> failwith "impossible pattern unmatch: TkReaderMacro" in
-     let macro = match%sedlex buf2 with
+     let com = match%sedlex buf2 with
        | Opt (lowercase_ext, Star alphadigit_ext) -> lexeme buf2
        | _ -> failwith "impossible pattern unmatch: TkReaderMacro" in
-     TkReaderMacro (prefix, macro)
+     TkReaderMacro (prefix, com)
 
   | _ -> failwith "invalid tok"
 

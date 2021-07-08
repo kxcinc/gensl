@@ -130,7 +130,7 @@ and unparse_pform ?fxnconv ppf : pform -> unit =
          pcut ppf; pstr ppf "}"
       | RelForm name, Infix ->
         pstr ppf "["; pcut ppf;
-        pstr ppf !name; psp ppf;
+        pstr ppf name; psp ppf;
         pmore (unparse_pnode ?fxnconv) ppf nodes;
         pcut ppf; pstr ppf "]"
       | (ToplevelForm | ListForm | VectorForm _ | MapForm | SetForm ), _ ->

@@ -427,7 +427,7 @@ module Parsetree = struct
     | VectorForm of int option  (** &k[ .. ], k could be omitted *)
     | MapForm                   (**   { .. } *)
     | SetForm                   (**  #{ .. } *)
-    | RelForm of string ref      (**   [ .. ] *)
+    | RelForm of string         (**   [ .. ] *)
   [@@deriving sexp]
 
   (** decor elements, who exists in the wirestring but
