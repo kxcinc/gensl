@@ -243,11 +243,12 @@ module Make (Lexer : Lexer) = struct
     | TkHat name, ps ->
        let kont = kont_simple_form () in
        let rel_node =
-         PDatumNode (PAtom {elem = (CodifiedSymbolAtom `Rel);
-                            repr = `Phantom}) in
+         PDatumNode
+           (pdatum_atom (CodifiedSymbolAtom `Rel) `Direct) in
        let name_node =
-         PDatumNode (PAtom {elem = (SymbolAtom name);
-                            repr = `Direct}) in
+         PKeywordNode
+           (pdatum_atom (SymbolAtom "name") `Direct,
+            pdatum_atom (SymbolAtom name) `Direct) in
        kont [rel_node; name_node] |> lift_result ps
     | TkReaderMacro (_prefix, _process), _ps ->
        failwith "unimplemented"
@@ -307,30 +308,6 @@ module Make (Lexer : Lexer) = struct
           let rec go (fxn : form_fixness option) (tok, ps) =
             debug_token "read_nodes.go " tok;
             let fxn f = Option.value ~default:f fxn in
-(*
-            let fxn f b = Option.value ~default:(match f with
-                | `PickAll -> Prefix (`PickAll, b)
-                | `PickOne -> Prefix (`PickOne, b)
-                | `PickK n -> Prefix (`PickK n, b)
-                | `GrabAll -> Postfix (`GrabAll, b)
-                | `GrabOne -> Postfix (`GrabOne, b)
-                | `GrabK n -> Postfix (`GrabK n, b)) fxn in
-*)
-(*
-            let with_kont_ps ps f =
-              lex ps >>= begin function
-                | TkSpaces _, ps ->
-                  (kont_simple_form ~fxn:(fxn f false) (), ps)
-                | TkHat name, ps ->
-                  (kont_complex_form (RelForm (ref name)), ps)
-                | tok, ps when tok_form_ending tok ->
-                  (kont_simple_form ~fxn:(fxn f false) (), unlex tok ps)
-                | tok, ps ->
-                  let ps = unlex tok ps in
-                  read_datum ps >>= fun (head, ps) ->
-                  (kont_simple_form_head ~fxn:(fxn f true) (), unlex tok ps)
-              end in
-*)
             match tok, duty with
             | TkSpaces _, _ -> loop duty buckets ps st
             | tok, PickUntil delim when fst (delim tok) ->
