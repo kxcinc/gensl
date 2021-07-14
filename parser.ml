@@ -250,7 +250,9 @@ module Make (Lexer : Lexer) = struct
            (pdatum_atom (SymbolAtom "name") `Direct,
             pdatum_atom (SymbolAtom name) `Direct) in
        kont [rel_node; name_node] |> lift_result ps
-    | TkReaderMacro (_prefix, _process), _ps ->
+    | TkReaderMacroUnicode (_prefix, _body), _ps ->
+       failwith "unimplemented"
+    | TkReaderMacroBytes (_prefix, _body), _ps ->
        failwith "unimplemented"
     | TkEof, _ -> Unexpected_eof |> fail 
 
