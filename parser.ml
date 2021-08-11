@@ -10,7 +10,41 @@ open ParserTypes
 
 let debugging = ref false
 
-module Make (Lexer : Lexer) = struct
+(* API to invoke gensle reader from macro impl *)
+module type SourceStream = sig
+  type t
+  val take : int -> t Seq.t
+  val peek : int -> t Seq.t
+  (* future work : val loc : unit -> loc *)
+
+(*
+    val next_datum : unit -> pdatum option
+    val next_nodes : pickduty -> pnode list
+*)
+end
+
+type 'x source_stream = (module SourceStream with type t = 'x)
+
+module type UnicodeReaderMacro = sig
+  val advertised_prefix : string
+  val process : Uchar.t source_stream -> pnode list
+end
+
+module type ByteReaderMacro = sig
+  val advertised_prefix : string
+  val process : char source_stream -> pnode list
+end
+
+type unicode_reader_macro = (module UnicodeReaderMacro)
+type byte_reader_macro = (module ByteReaderMacro)
+
+
+module Make
+    (Lexer : Lexer)
+    (Extensions : sig
+       val unicode_reader_macros : (string*unicode_reader_macro) list
+     end)
+= struct
   open Lexer
 
   type nonrec picking_frame = (buffer, location) picking_frame
@@ -144,34 +178,6 @@ module Make (Lexer : Lexer) = struct
 
   module FVA = FormValidatorAutomaton
 
-  (* API to invoke gensle reader from macro impl *)
-  module type SourceStream = sig
-    type t
-    val take : int -> t Seq.t
-    val peek : int -> t Seq.t
-    (* future work : val loc : unit -> loc *)
-
-(*
-    val next_datum : unit -> pdatum option
-    val next_nodes : pickduty -> pnode list
-*)
-  end
-
-  type 'x source_stream = (module SourceStream with type t = 'x)
-
-  module type ReaderMacroUnicode = sig
-    val advertised_prefix : string
-    val process : Uchar.t source_stream -> pnode list
-  end
-
-  module type ReaderMacroByte = sig
-    val advertised_prefix : string
-    val process : char source_stream -> pnode list
-  end
-
-  type unicode_reader_macro = (module ReaderMacroUnicode)
-  type byte_reader_macro = (module ReaderMacroByte)
-
   let rec read_datum : pstate -> pdatum presult =
     fun ps ->
     debug_msg "entering read_datum";
@@ -252,7 +258,7 @@ module Make (Lexer : Lexer) = struct
            (pdatum_atom (SymbolAtom "name") `Direct,
             pdatum_atom (SymbolAtom name) `Direct) in
        kont [rel_node; name_node] |> lift_result ps
-    | TkUnicodeReaderMacro (_prefix, body), _ps ->
+    | TkUnicodeReaderMacro (prefix, body), _ps ->
        let module Queue = Stdlib.Queue in
        let buf = Sedlexing.Utf8.from_string body in
        let source = match%sedlex buf with
@@ -261,7 +267,7 @@ module Make (Lexer : Lexer) = struct
        let pos = ref 0 in
        let len = Array.length source in
        let unconsumed = Queue.create () in
-       let module UnicodeSourceStream : SourceStream = struct
+       let module UnicodeSourceStream : SourceStream with type t = Uchar.t = struct
          type t = Uchar.t
          let take n =
            let ofs = !pos in
@@ -273,6 +279,12 @@ module Make (Lexer : Lexer) = struct
            Queue.add_seq unconsumed subseq;
            subseq
        end in
+       let module M = (val (List.find
+                              (fun (name, _) -> name = prefix)
+                              Extensions.unicode_reader_macros
+                            |> snd)
+                           : UnicodeReaderMacro) in
+       let _pnodes = M.process (module UnicodeSourceStream) in
        let _new_buf =
          Array.append
            (Queue.to_seq unconsumed |> Array.of_seq)
