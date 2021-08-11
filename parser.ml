@@ -151,8 +151,10 @@ module Make (Lexer : Lexer) = struct
     val peek : int -> t Seq.t
     (* future work : val loc : unit -> loc *)
 
+(*
     val next_datum : unit -> pdatum option
     val next_nodes : pickduty -> pnode list
+*)
   end
 
   type 'x source_stream = (module SourceStream with type t = 'x)
@@ -250,9 +252,32 @@ module Make (Lexer : Lexer) = struct
            (pdatum_atom (SymbolAtom "name") `Direct,
             pdatum_atom (SymbolAtom name) `Direct) in
        kont [rel_node; name_node] |> lift_result ps
-    | TkReaderMacroUnicode (_prefix, _body), _ps ->
-       failwith "unimplemented"
-    | TkReaderMacroBytes (_prefix, _body), _ps ->
+    | TkUnicodeReaderMacro (_prefix, body), _ps ->
+       let module Queue = Stdlib.Queue in
+       let buf = Sedlexing.Utf8.from_string body in
+       let source = match%sedlex buf with
+         | Star any -> Sedlexing.lexeme buf
+         | _ -> failwith "invalid tok" in
+       let pos = ref 0 in
+       let len = Array.length source in
+       let unconsumed = Queue.create () in
+       let module UnicodeSourceStream : SourceStream = struct
+         type t = Uchar.t
+         let take n =
+           let ofs = !pos in
+           pos := ofs + n;
+           Array.sub source ofs n |> Array.to_seq
+         let peek n =
+           let subseq = Array.sub source !pos n |> Array.to_seq in
+           pos := !pos + n;
+           Queue.add_seq unconsumed subseq;
+           subseq
+       end in
+       let _new_buf =
+         Array.append
+           (Queue.to_seq unconsumed |> Array.of_seq)
+           (Array.sub source !pos (len - !pos))
+         |> Sedlexing.from_uchar_array in
        failwith "unimplemented"
     | TkEof, _ -> Unexpected_eof |> fail 
 

@@ -136,26 +136,16 @@ and token buf =
   | "@<" -> TkAnnoPrevIndicator
   | "@" -> TkAnnoStandaloneIndicator
 
-  (* TkReaderMacroUnicode *)
-  | lowercase_ext, Star alphadigit_ext, ":", Opt (lowercase_ext, (Star alphadigit_ext)) ->
+  (* Reader Macro *)
+  | lowercase_ext, Star alphadigit_ext, ":", Star any ->
      let buf2 = Sedlexing.Utf8.from_string (lexeme buf) in
      let prefix = match%sedlex buf2 with
-       | lowercase_ext, Star alphadigit_ext, ":" -> lexeme buf2
-       | _ -> failwith "impossible pattern unmatch: TkReaderMacroUnicode" in
+       | lowercase_ext, Star alphadigit_ext, ":" -> lexeme_strip 0 1 buf2
+       | _ -> failwith "impossible pattern unmatch" in
      let body = match%sedlex buf2 with
-       | Opt (lowercase_ext, Star alphadigit_ext) -> lexeme buf2
-       | _ -> failwith "impossible pattern unmatch: TkReaderMacroUnicode" in
-     TkReaderMacroUnicode (prefix, body)
-  (* TkReaderMacroBytes *)
-  | lowercase_ext, Star alphadigit_ext, ":", Plus hexbyte ->
-     let buf2 = Sedlexing.Utf8.from_string (lexeme buf) in
-     let prefix = match%sedlex buf2 with
-       | lowercase_ext, Star alphadigit_ext, ":" -> lexeme buf2
-       | _ -> failwith "impossible pattern unmatch: TkReaderMacroUnicode" in
-     let body = match%sedlex buf2 with
-       | Plus hexbyte -> Hex.to_bytes (`Hex (lexeme buf2))
-       | _ -> failwith "impossible pattern unmatch: TkReaderMacroUnicode" in
-     TkReaderMacroBytes (prefix, body)
+       | Star any -> lexeme buf
+       | _ -> failwith "impossible pattern unmatch" in
+     TkUnicodeReaderMacro (prefix, body)
 
   | _ -> failwith "invalid tok"
 
