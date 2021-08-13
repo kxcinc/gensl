@@ -14,6 +14,17 @@ module ParserTypes = struct
 
   type lexer_error = ..
 
+  type lexbuf = Sedlexing.lexbuf
+
+  let sexp_of_lexbuf buf = begin
+    match%sedlex buf with
+    | Star any -> Sexplib.Sexp.Atom (Sedlexing.Utf8.lexeme buf)
+    | _ -> failwith "invalid tok" end
+
+  let lexbuf_of_sexp = function
+    | Sexplib.Sexp.Atom str -> Sedlexing.Utf8.from_string str
+    | _ -> failwith "sexp_of_lexbuf"
+
   type token =
     | TkEof
     | TkSpaces of string
@@ -43,7 +54,7 @@ module ParserTypes = struct
     | TkAnnoNextIndicator
     | TkAnnoPrevIndicator
     | TkAnnoStandaloneIndicator
-    | TkUnicodeReaderMacro of string*string
+    | TkReaderMacro of string*lexbuf
   [@@deriving sexp]
 
   let pp_token_class ppf (cls : token -> bool) =
@@ -132,6 +143,38 @@ module ParserTypes = struct
 end
 open ParserTypes
 
+(* API to invoke gensle reader from macro impl *)
+module type SourceStream = sig
+  type t
+
+  val take : int -> t Seq.t
+  val peek : int -> t Seq.t
+  (* future work : val loc : unit -> loc *)
+
+  val next_datum : unit -> pdatum option
+  val next_nodes : pickduty -> pnode list
+end
+
+type 'x source_stream = (module SourceStream with type t = 'x)
+
+module type UnicodeReaderMacro = sig
+  val advertised_prefix : string
+  val process : Uchar.t source_stream -> pnode list
+end
+
+module type ByteReaderMacro = sig
+  val advertised_prefix : string
+  val process : char source_stream -> pnode list
+end
+
+type unicode_reader_macro = (module UnicodeReaderMacro)
+type byte_reader_macro = (module ByteReaderMacro)
+
+module type Extensions = sig
+  val unicode_reader_macros : unicode_reader_macro list
+  val byte_reader_macros : byte_reader_macro list
+end
+
 module type Lexer = sig
   type buffer
   type location
@@ -160,6 +203,8 @@ type parse_error +=
  | Unmatched_graball_count of int*int
  | Dimentional_violation of int
  | No_relname
+ | No_macro of string
+ | Duplicate_macro of string
  | Parse_errors of trace
 
 let () =

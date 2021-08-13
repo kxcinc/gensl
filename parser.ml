@@ -10,41 +10,7 @@ open ParserTypes
 
 let debugging = ref false
 
-(* API to invoke gensle reader from macro impl *)
-module type SourceStream = sig
-  type t
-  val take : int -> t Seq.t
-  val peek : int -> t Seq.t
-  (* future work : val loc : unit -> loc *)
-
-(*
-    val next_datum : unit -> pdatum option
-    val next_nodes : pickduty -> pnode list
-*)
-end
-
-type 'x source_stream = (module SourceStream with type t = 'x)
-
-module type UnicodeReaderMacro = sig
-  val advertised_prefix : string
-  val process : Uchar.t source_stream -> pnode list
-end
-
-module type ByteReaderMacro = sig
-  val advertised_prefix : string
-  val process : char source_stream -> pnode list
-end
-
-type unicode_reader_macro = (module UnicodeReaderMacro)
-type byte_reader_macro = (module ByteReaderMacro)
-
-
-module Make
-    (Lexer : Lexer)
-    (Extensions : sig
-       val unicode_reader_macros : (string*unicode_reader_macro) list
-     end)
-= struct
+module Make (Lexer : Lexer) (Extensions : Extensions) = struct
   open Lexer
 
   type nonrec picking_frame = (buffer, location) picking_frame
@@ -258,39 +224,89 @@ module Make
            (pdatum_atom (SymbolAtom "name") `Direct,
             pdatum_atom (SymbolAtom name) `Direct) in
        kont [rel_node; name_node] |> lift_result ps
-    | TkUnicodeReaderMacro (prefix, body), _ps ->
-       let module Queue = Stdlib.Queue in
-       let buf = Sedlexing.Utf8.from_string body in
-       let source = match%sedlex buf with
-         | Star any -> Sedlexing.lexeme buf
-         | _ -> failwith "invalid tok" in
-       let pos = ref 0 in
-       let len = Array.length source in
-       let unconsumed = Queue.create () in
-       let module UnicodeSourceStream : SourceStream with type t = Uchar.t = struct
-         type t = Uchar.t
-         let take n =
-           let ofs = !pos in
-           pos := ofs + n;
-           Array.sub source ofs n |> Array.to_seq
-         let peek n =
-           let subseq = Array.sub source !pos n |> Array.to_seq in
-           pos := !pos + n;
-           Queue.add_seq unconsumed subseq;
-           subseq
-       end in
-       let module M = (val (List.find
-                              (fun (name, _) -> name = prefix)
-                              Extensions.unicode_reader_macros
-                            |> snd)
-                           : UnicodeReaderMacro) in
-       let _pnodes = M.process (module UnicodeSourceStream) in
-       let _new_buf =
-         Array.append
-           (Queue.to_seq unconsumed |> Array.of_seq)
-           (Array.sub source !pos (len - !pos))
-         |> Sedlexing.from_uchar_array in
-       failwith "unimplemented"
+    | TkReaderMacro (prefix, body), _ps ->
+       begin match
+           List.find_opt
+             (fun m ->
+                let module M = (val m : UnicodeReaderMacro) in
+                M.advertised_prefix = prefix)
+             Extensions.unicode_reader_macros,
+           List.find_opt
+             (fun m ->
+                let module M = (val m : ByteReaderMacro) in
+                M.advertised_prefix = prefix)
+             Extensions.byte_reader_macros with
+       (* unicode reader macro *)
+       | Some m, None ->
+          let module Queue = Stdlib.Queue in
+          let unconsumed = Queue.create () in
+          let module UnicodeSourceStream : SourceStream = struct
+            type t = Uchar.t
+
+            let rec take n () = if n <= 0 then Seq.Nil else
+                (match%sedlex body with
+                 | any -> Seq.Cons (Sedlexing.lexeme_char body 0, take (n-1))
+                 | _ -> failwith "invalid tok")
+            let peek n =
+              let taken = take n in
+              Queue.add_seq unconsumed taken;
+              taken
+
+          end in
+          let module M = (val m : UnicodeReaderMacro) in
+          let _pnodes = M.process in
+          failwith "unimplemented"
+       (* byte reader macro *)
+       | None, Some _m ->
+          print_endline prefix;
+          failwith "unimplemented"
+       (* Duplicate macro *)
+       | Some _, Some _ -> Duplicate_macro prefix |> fail
+       (* No macro *)
+       | None, None -> No_macro prefix |> fail
+       end
+(*
+       begin match
+           List.find_opt
+             (fun (name, _) -> name = prefix)
+             Extensions.unicode_reader_macros,
+           List.find_opt
+             (fun (name, _) -> name = prefix)
+             Extensions.byte_reader_macros with
+        | Some (_, macro), None ->
+           let module Queue = Stdlib.Queue in
+           let buf = Sedlexing.Utf8.from_string body in
+           let source = match%sedlex buf with
+             | Star any -> Sedlexing.lexeme buf
+             | _ -> failwith "invalid tok" in
+           let pos = ref 0 in
+           let len = Array.length source in
+           let unconsumed = Queue.create () in
+           let module UnicodeSourceStream : SourceStream with type t = Uchar.t = struct
+             type t = Uchar.t
+             let take n =
+               let ofs = !pos in
+               pos := ofs + n;
+               Array.sub source ofs n |> Array.to_seq
+             let peek n =
+               let subseq = Array.sub source !pos n |> Array.to_seq in
+               pos := !pos + n;
+               Queue.add_seq unconsumed subseq;
+               subseq
+           end in
+           let module M = (val macro : UnicodeReaderMacro) in
+           let _pnodes = M.process (module UnicodeSourceStream) in
+           let _newbuf =
+             Array.append
+               (Queue.to_seq unconsumed |> Array.of_seq)
+               (Array.sub source !pos (len - !pos))
+             |> Sedlexing.from_uchar_array
+             |> Parsing.ParserTypes.pstate in
+        | None, Some (_, _macro) -> failwith "unimplemented"
+        | Some _, Some _ -> Duplicate_macro prefix |> fail
+        | None, None -> No_macro prefix |> fail
+       end
+*)
     | TkEof, _ -> Unexpected_eof |> fail 
 
 
@@ -497,4 +513,4 @@ module Make
     in pdatum_form nodes SimpleForm fxn repr |> kont_ok
 end
 
-module Default = Make(Genslex.Lexer)
+module Default = Make (Genslex.Lexer)

@@ -26,12 +26,12 @@ let csymbprefix_std = [%sedlex.regexp? "!"]
 let csymbprefix_app = [%sedlex.regexp? "!!"]
 
 let rec csymb_std buf = match%sedlex buf with
- | "toplevel" -> `Toplevel | "envelop" -> `Envelop | "metadata" -> `Metadata
- | "desc" -> `Desc | "hash" -> `Hash | "uuid" -> `Uuid | "version" -> `Version
- | "list" -> `List | "vector" -> `Vector | "set" -> `Set | "map" -> `Map
- | "int" -> `Int | "uint" -> `Uint | "float" -> `Float | "timestamp" -> `Timestamp
- | "rel" -> `Rel
- | _ -> failwith "invalid tok"
+  | "toplevel" -> `Toplevel | "envelop" -> `Envelop | "metadata" -> `Metadata
+  | "desc" -> `Desc | "hash" -> `Hash | "uuid" -> `Uuid | "version" -> `Version
+  | "list" -> `List | "vector" -> `Vector | "set" -> `Set | "map" -> `Map
+  | "int" -> `Int | "uint" -> `Uint | "float" -> `Float | "timestamp" -> `Timestamp
+  | "rel" -> `Rel
+  | _ -> failwith "invalid tok"
 
 and csymb_app buf = match%sedlex buf with
   | "app01" -> `Appsymb01 | "app02" -> `Appsymb02 | "app03" -> `Appsymb03
@@ -110,9 +110,9 @@ and token buf =
 
   | "#[" -> TkPoundBracketOpen
   | '&', (Opt (Plus digit)), '[' ->
-     let k = (lexeme_strip 1 1 buf) in
-     let k_opt = if k = "" then None else Some k in
-     TkAmpersandBracketOpen (Option.map int_of_string k_opt)
+    let k = (lexeme_strip 1 1 buf) in
+    let k_opt = if k = "" then None else Some k in
+    TkAmpersandBracketOpen (Option.map int_of_string k_opt)
   | "#{" -> TkPoundCurlyOpen
 
   | ",", (Plus digit) -> TkPickK (false, int_of_string (lexeme_strip 1 0 buf))
@@ -137,22 +137,14 @@ and token buf =
   | "@" -> TkAnnoStandaloneIndicator
 
   (* Reader Macro *)
-  | lowercase_ext, Star alphadigit_ext, ":", Star any ->
-     let buf2 = Sedlexing.Utf8.from_string (lexeme buf) in
-     let prefix = match%sedlex buf2 with
-       | lowercase_ext, Star alphadigit_ext, ":" -> lexeme_strip 0 1 buf2
-       | _ -> failwith "impossible pattern unmatch" in
-     let body = match%sedlex buf2 with
-       | Star any -> lexeme buf
-       | _ -> failwith "impossible pattern unmatch" in
-     TkUnicodeReaderMacro (prefix, body)
+  | lowercase_ext, Star alphadigit_ext, ":" ->
+    let prefix = lexeme buf in
+    TkReaderMacro (prefix, buf)
 
   | _ -> failwith "invalid tok"
 
-module Lexer : Lexer with
-           type buffer = Sedlexing.lexbuf
-       and type location = Lexing.position
-  = struct
+module Lexer : Lexer with type buffer = Sedlexing.lexbuf
+                      and type location = Lexing.position = struct
   type buffer = Sedlexing.lexbuf
   type location = Lexing.position
   type nonrec pstate = buffer pstate
