@@ -54,7 +54,7 @@ module ParserTypes = struct
     | TkAnnoNextIndicator
     | TkAnnoPrevIndicator
     | TkAnnoStandaloneIndicator
-    | TkReaderMacro of string*lexbuf
+    | TkReaderMacro of string
   [@@deriving sexp]
 
   let pp_token_class ppf (cls : token -> bool) =
@@ -147,8 +147,8 @@ open ParserTypes
 module type SourceStream = sig
   type t
 
-  val take : int -> t Seq.t
-  val peek : int -> t Seq.t
+  val take : int -> t list
+  val peek : int -> t list
   (* future work : val loc : unit -> loc *)
 
   val next_datum : unit -> pdatum option
@@ -184,6 +184,8 @@ module type Lexer = sig
   (* val source : buffer -> span_source *)
 
   val loc : buffer -> location
+  val take : buffer -> Uchar.t option
+  val peek : buffer -> Uchar.t option
   val lexer : buffer -> lexresult
   (** [lexer buf pos] consumes and returns next token in buffer *)
 end

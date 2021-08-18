@@ -138,8 +138,8 @@ and token buf =
 
   (* Reader Macro *)
   | lowercase_ext, Star alphadigit_ext, ":" ->
-    let prefix = lexeme buf in
-    TkReaderMacro (prefix, buf)
+     let prefix = lexeme_strip 0 1 buf in
+     TkReaderMacro prefix
 
   | _ -> failwith "invalid tok"
 
@@ -150,10 +150,19 @@ module Lexer : Lexer with type buffer = Sedlexing.lexbuf
   type nonrec pstate = buffer pstate
   type nonrec lexresult = buffer lexresult
 
-  type lexer_error += No_next_valid_token
+  type lexer_error +=
+    | No_next_valid_token
+
+  (* let source buf = `DirectInput (Some (loc buf).pos_fname) *)
 
   let loc buf = Sedlexing.lexing_positions buf |> snd (* curr_p *)
-  (* let source buf = `DirectInput (Some (loc buf).pos_fname) *)
+  let take buf =
+    let c = Sedlexing.next buf in
+    Sedlexing.start buf; c
+  let peek buf =
+    let c = Sedlexing.next buf in
+    Sedlexing.backtrack buf |> fun _ -> (); c
+
   let lexer buf =
     try
       let tok = token buf in

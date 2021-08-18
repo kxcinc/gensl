@@ -224,7 +224,8 @@ module Make (Lexer : Lexer) (Extensions : Extensions) = struct
            (pdatum_atom (SymbolAtom "name") `Direct,
             pdatum_atom (SymbolAtom name) `Direct) in
        kont [rel_node; name_node] |> lift_result ps
-    | TkReaderMacro (prefix, body), _ps ->
+    | TkReaderMacro prefix, ps ->
+       let buf = ps.buf in
        begin match
            List.find_opt
              (fun m ->
@@ -238,24 +239,37 @@ module Make (Lexer : Lexer) (Extensions : Extensions) = struct
              Extensions.byte_reader_macros with
        (* unicode reader macro *)
        | Some m, None ->
-          let module Queue = Stdlib.Queue in
-          let unconsumed = Queue.create () in
-          let module UnicodeSourceStream : SourceStream = struct
+          let module UnicodeSourceStream : SourceStream with type t = Uchar.t = struct
             type t = Uchar.t
 
-            let rec take n () = if n <= 0 then Seq.Nil else
-                (match%sedlex body with
-                 | any -> Seq.Cons (Sedlexing.lexeme_char body 0, take (n-1))
-                 | _ -> failwith "invalid tok")
-            let peek n =
-              let taken = take n in
-              Queue.add_seq unconsumed taken;
-              taken
+            let rec take n =
+              if n <= 0 then [] else
+                match Lexer.take buf with
+                | Some c -> c :: take (n-1)
+                | None -> raise Not_found
+
+            let rec peek n =
+              if n <= 0 then [] else
+                match Lexer.peek buf with
+                | Some c -> c :: peek (n-1)
+                | None -> raise Not_found
+
+            let next_datum () =
+              match read_datum ps with
+              | Ok (datum, _) -> Some datum
+              | Error _ -> None
+
+            let next_nodes duty =
+              let kont = kont_simple_form () in
+              match read_nodes (duty, kont) ps with
+              | Ok (PForm {elem = nodes, _, _; repr = _}, _) -> nodes
+              | _ -> failwith "invalid form"
 
           end in
           let module M = (val m : UnicodeReaderMacro) in
-          let _pnodes = M.process in
-          failwith "unimplemented"
+          let pnodes = M.process (module UnicodeSourceStream) in
+          let kont = kont_simple_form () in
+          kont pnodes |> lift_result ps
        (* byte reader macro *)
        | None, Some _m ->
           print_endline prefix;
