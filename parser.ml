@@ -279,48 +279,6 @@ module Make (Lexer : Lexer) (Extensions : Extensions) = struct
        (* No macro *)
        | None, None -> No_macro prefix |> fail
        end
-(*
-       begin match
-           List.find_opt
-             (fun (name, _) -> name = prefix)
-             Extensions.unicode_reader_macros,
-           List.find_opt
-             (fun (name, _) -> name = prefix)
-             Extensions.byte_reader_macros with
-        | Some (_, macro), None ->
-           let module Queue = Stdlib.Queue in
-           let buf = Sedlexing.Utf8.from_string body in
-           let source = match%sedlex buf with
-             | Star any -> Sedlexing.lexeme buf
-             | _ -> failwith "invalid tok" in
-           let pos = ref 0 in
-           let len = Array.length source in
-           let unconsumed = Queue.create () in
-           let module UnicodeSourceStream : SourceStream with type t = Uchar.t = struct
-             type t = Uchar.t
-             let take n =
-               let ofs = !pos in
-               pos := ofs + n;
-               Array.sub source ofs n |> Array.to_seq
-             let peek n =
-               let subseq = Array.sub source !pos n |> Array.to_seq in
-               pos := !pos + n;
-               Queue.add_seq unconsumed subseq;
-               subseq
-           end in
-           let module M = (val macro : UnicodeReaderMacro) in
-           let _pnodes = M.process (module UnicodeSourceStream) in
-           let _newbuf =
-             Array.append
-               (Queue.to_seq unconsumed |> Array.of_seq)
-               (Array.sub source !pos (len - !pos))
-             |> Sedlexing.from_uchar_array
-             |> Parsing.ParserTypes.pstate in
-        | None, Some (_, _macro) -> failwith "unimplemented"
-        | Some _, Some _ -> Duplicate_macro prefix |> fail
-        | None, None -> No_macro prefix |> fail
-       end
-*)
     | TkEof, _ -> Unexpected_eof |> fail 
 
 
@@ -527,4 +485,61 @@ module Make (Lexer : Lexer) (Extensions : Extensions) = struct
     in pdatum_form nodes SimpleForm fxn repr |> kont_ok
 end
 
-module Default = Make (Genslex.Lexer)
+module Extensions : Extensions = struct
+  let true_macro =
+    (module struct
+      let advertised_prefix = "t"
+      let process _ = [
+        PDatumNode
+          (pdatum_atom
+             (BoolAtom true)
+             (`ReaderMacro ("t", LiteralMacroBody "t")))
+      ]
+    end : UnicodeReaderMacro)
+  let false_macro =
+    (module struct
+      let advertised_prefix = "f"
+      let process _ = [
+        PDatumNode
+          (pdatum_atom
+             (BoolAtom false)
+             (`ReaderMacro ("f", LiteralMacroBody "f")))
+      ]
+    end : UnicodeReaderMacro)
+  let bool_macro =
+      (module struct
+        let advertised_prefix = "boolbool"
+        let process src =
+          let string_of_uchars uchars =
+            List.map Uchar.to_char uchars
+            |> List.to_seq
+            |> String.of_seq in
+          let module M = (val src : SourceStream with type t = Uchar.t) in
+          match M.take 4 |> string_of_uchars with
+          | "true" -> [
+              PDatumNode
+                (pdatum_atom
+                   (BoolAtom true)
+                   (`ReaderMacro ("t", LiteralMacroBody "t")))
+            ]
+          | "fals" -> begin match M.take 1 |> string_of_uchars with
+              | "e" -> [
+                 PDatumNode
+                   (pdatum_atom
+                      (BoolAtom false)
+                      (`ReaderMacro ("f", LiteralMacroBody "f")))
+               ]
+              | _ -> raise Not_found
+            end
+          | _ -> raise Not_found
+      end : UnicodeReaderMacro)
+
+  let unicode_reader_macros = [
+    true_macro;
+    false_macro;
+    bool_macro;
+  ]
+  let byte_reader_macros = []
+end
+
+module Default = Make (Genslex.Lexer) (Extensions)
