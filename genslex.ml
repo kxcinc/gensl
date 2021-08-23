@@ -60,6 +60,8 @@ and token buf =
   (* token TkBool *)
   | boolprefix, "true" -> TkBool true
   | boolprefix, "false" -> TkBool false
+  | "t:" -> TkBool true
+  | "f:" -> TkBool false
   (* token TkNumeric *)
   | Opt ('+' | '-'), Plus digit, ((Opt '.', Star digit) | ('/', Plus digit)), Opt (Plus alpha) ->
     let buf2 = Sedlexing.Utf8.from_string (lexeme buf) in

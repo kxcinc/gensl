@@ -267,9 +267,7 @@ module Make (Lexer : Lexer) (Extensions : Extensions) = struct
 
           end in
           let module M = (val m : UnicodeReaderMacro) in
-          let pnodes = M.process (module UnicodeSourceStream) in
-          let kont = kont_simple_form () in
-          kont pnodes |> lift_result ps
+          ok ps (M.process (module UnicodeSourceStream))
        (* byte reader macro *)
        | None, Some _m ->
           print_endline prefix;
@@ -486,29 +484,21 @@ module Make (Lexer : Lexer) (Extensions : Extensions) = struct
 end
 
 module Extensions : Extensions = struct
-  let true_macro =
+  let tt : unicode_reader_macro =
     (module struct
-      let advertised_prefix = "t"
-      let process _ = [
-        PDatumNode
-          (pdatum_atom
-             (BoolAtom true)
-             (`ReaderMacro ("t", LiteralMacroBody "t")))
-      ]
-    end : UnicodeReaderMacro)
-  let false_macro =
+      let advertised_prefix = "tt"
+      let process _ =
+        pdatum_atom (BoolAtom true) (`ReaderMacro ("t", LiteralMacroBody "t"))
+    end)
+  let ff : unicode_reader_macro =
     (module struct
-      let advertised_prefix = "f"
-      let process _ = [
-        PDatumNode
-          (pdatum_atom
-             (BoolAtom false)
-             (`ReaderMacro ("f", LiteralMacroBody "f")))
-      ]
-    end : UnicodeReaderMacro)
+      let advertised_prefix = "ff"
+      let process _ =
+        pdatum_atom (BoolAtom false) (`ReaderMacro ("f", LiteralMacroBody "f"))
+    end)
   let bool_macro =
       (module struct
-        let advertised_prefix = "boolbool"
+        let advertised_prefix = "B"
         let process src =
           let string_of_uchars uchars =
             List.map Uchar.to_char uchars
@@ -516,27 +506,18 @@ module Extensions : Extensions = struct
             |> String.of_seq in
           let module M = (val src : SourceStream with type t = Uchar.t) in
           match M.take 4 |> string_of_uchars with
-          | "true" -> [
-              PDatumNode
-                (pdatum_atom
-                   (BoolAtom true)
-                   (`ReaderMacro ("t", LiteralMacroBody "t")))
-            ]
+          | "true" -> 
+             pdatum_atom (BoolAtom true) (`ReaderMacro ("t", LiteralMacroBody "t"))
           | "fals" -> begin match M.take 1 |> string_of_uchars with
-              | "e" -> [
-                 PDatumNode
-                   (pdatum_atom
-                      (BoolAtom false)
-                      (`ReaderMacro ("f", LiteralMacroBody "f")))
-               ]
+              | "e" -> 
+                 pdatum_atom (BoolAtom false) (`ReaderMacro ("f", LiteralMacroBody "f"))
               | _ -> raise Not_found
             end
           | _ -> raise Not_found
       end : UnicodeReaderMacro)
 
   let unicode_reader_macros = [
-    true_macro;
-    false_macro;
+    tt; ff;
     bool_macro;
   ]
   let byte_reader_macros = []

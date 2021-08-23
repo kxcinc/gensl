@@ -159,12 +159,12 @@ type 'x source_stream = (module SourceStream with type t = 'x)
 
 module type UnicodeReaderMacro = sig
   val advertised_prefix : string
-  val process : Uchar.t source_stream -> pnode list
+  val process : Uchar.t source_stream -> pdatum
 end
 
 module type ByteReaderMacro = sig
   val advertised_prefix : string
-  val process : char source_stream -> pnode list
+  val process : char source_stream -> pdatum
 end
 
 type unicode_reader_macro = (module UnicodeReaderMacro)
