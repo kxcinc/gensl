@@ -96,8 +96,10 @@ let%test "simple examples parses" =
   tryparse "(1 . 2 . 3 4 5 .. 6 . 7 8 .. ..)";
   tryparse "(1 ,, 1 2 3 ..)";
   tryparse "(1 ,, 1 . 2 3 ..)";
+(*
   tryparse "!envelop";
   tryparse "(!envelop :!hash \"abcdefg\")";
+*)
   tryparse "!!app03";
   badparse "!app03";
   badparse "!!envelop";
@@ -209,4 +211,8 @@ let%test "simple examples parses" =
   tryparse "(0 . 1 ..1 2 3)";
   tryparse "(0 . 1 2 ..2 3)";
   tryparse "(0 . 1 2 3 ..3)";
+
+  tryparse "t:";
+  tryparse "f:";
+  tryparse "base64n:8:MjRU/zk=";
   true

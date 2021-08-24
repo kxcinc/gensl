@@ -147,8 +147,8 @@ open ParserTypes
 module type SourceStream = sig
   type t
 
-  val take : int -> t list
-  val peek : int -> t list
+  val take : int -> t array
+  val peek : int -> t array
   (* future work : val loc : unit -> loc *)
 
   val next_datum : unit -> pdatum option

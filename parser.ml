@@ -242,17 +242,19 @@ module Make (Lexer : Lexer) (Extensions : Extensions) = struct
           let module UnicodeSourceStream : SourceStream with type t = Uchar.t = struct
             type t = Uchar.t
 
-            let rec take n =
-              if n <= 0 then [] else
-                match Lexer.take buf with
-                | Some c -> c :: take (n-1)
-                | None -> raise Not_found
+            let take n = 
+              let a = Array.make n (Uchar.of_int 0) in
+              Array.iteri (fun i _ ->
+                  match Lexer.take buf with
+                  | Some u -> Array.set a i u
+                  | None -> raise Not_found) a; a
 
-            let rec peek n =
-              if n <= 0 then [] else
-                match Lexer.peek buf with
-                | Some c -> c :: peek (n-1)
-                | None -> raise Not_found
+            let peek n =
+              let a = Array.make n (Uchar.of_int 0) in
+              Array.iteri (fun i _ ->
+                  match Lexer.peek buf with
+                  | Some u -> Array.set a i u
+                  | None -> raise Not_found) a; a
 
             let next_datum () =
               match read_datum ps with
@@ -270,7 +272,30 @@ module Make (Lexer : Lexer) (Extensions : Extensions) = struct
           ok ps (M.process (module UnicodeSourceStream))
        (* byte reader macro *)
        | None, Some _m ->
+(*
+          let bytes_buf =
+            Sedlexing.create
+              (fun a pos n -> Array.set
+          let module BytesLexer : Lexer = struct
+            type buffer = Lexing.lexbuf
+            type location = Lexing.position
+            type nonrec pstate = buffer pstate
+            type nonrec lexresult = buffer lexresult
+
+            let loc buf =
+              (Lexing.lexeme_start_p buf, Lexing.lexeme_end_p buf)
+            let take n =
+              Lexing.
+          end in
+          let module ByteReaderMacro : SourceStream with type t = char = struct
+            type t = char
+
+            let rec take n =
+              if n <= 0 then [] else
+                match Lexer.take buf with
+          end in
           print_endline prefix;
+*)
           failwith "unimplemented"
        (* Duplicate macro *)
        | Some _, Some _ -> Duplicate_macro prefix |> fail
@@ -484,41 +509,48 @@ module Make (Lexer : Lexer) (Extensions : Extensions) = struct
 end
 
 module Extensions : Extensions = struct
-  let tt : unicode_reader_macro =
+  let t : unicode_reader_macro =
     (module struct
-      let advertised_prefix = "tt"
+      let advertised_prefix = "t"
       let process _ =
-        pdatum_atom (BoolAtom true) (`ReaderMacro ("t", LiteralMacroBody "t"))
+        pdatum_atom (BoolAtom true) (`ReaderMacro ("t", LiteralMacroBody ""))
     end)
-  let ff : unicode_reader_macro =
+
+  let f : unicode_reader_macro =
     (module struct
-      let advertised_prefix = "ff"
+      let advertised_prefix = "f"
       let process _ =
-        pdatum_atom (BoolAtom false) (`ReaderMacro ("f", LiteralMacroBody "f"))
+        pdatum_atom (BoolAtom false) (`ReaderMacro ("f", LiteralMacroBody ""))
     end)
-  let bool_macro =
-      (module struct
-        let advertised_prefix = "B"
-        let process src =
-          let string_of_uchars uchars =
-            List.map Uchar.to_char uchars
-            |> List.to_seq
-            |> String.of_seq in
-          let module M = (val src : SourceStream with type t = Uchar.t) in
-          match M.take 4 |> string_of_uchars with
-          | "true" -> 
-             pdatum_atom (BoolAtom true) (`ReaderMacro ("t", LiteralMacroBody "t"))
-          | "fals" -> begin match M.take 1 |> string_of_uchars with
-              | "e" -> 
-                 pdatum_atom (BoolAtom false) (`ReaderMacro ("f", LiteralMacroBody "f"))
-              | _ -> raise Not_found
-            end
-          | _ -> raise Not_found
-      end : UnicodeReaderMacro)
+
+  let base64n : unicode_reader_macro =
+    (module struct
+      let advertised_prefix = "base64n"
+      let process src =
+        let module M = (val src : SourceStream with type t = Uchar.t) in
+        let string_of_uchar_array us : string =
+          let b = Buffer.create (Array.length us * 4) in
+          Array.iter (fun u -> Buffer.add_utf_8_uchar b u) us;
+          Buffer.contents b in
+        let rec get_size acc =
+          let u = Array.get (M.take 1) 0 in
+          if Uchar.equal u (Uchar.of_char ':') then
+            int_of_string acc
+          else if Uchar.compare (Uchar.of_char '0') u <= 0 &&
+                  Uchar.compare u (Uchar.of_char '9') <= 0 then
+            get_size (acc ^ (Uchar.to_char u |> String.make 1))
+          else
+            raise (Invalid_argument (string_of_uchar_array [|u|])) in
+        let size = get_size "" in
+        let s = M.take size |> string_of_uchar_array in
+        let bs = Base64.decode_exn s |> Bytes.of_string in
+        pdatum_atom
+          (BytesAtom bs)
+          (`ReaderMacro ("base64n", StringMacroBody (string_of_int size ^ s)))
+    end)
 
   let unicode_reader_macros = [
-    tt; ff;
-    bool_macro;
+    t; f; base64n;
   ]
   let byte_reader_macros = []
 end
