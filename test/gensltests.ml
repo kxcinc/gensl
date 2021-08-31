@@ -215,4 +215,24 @@ let%test "simple examples parses" =
   tryparse "t:";
   tryparse "f:";
   tryparse "base64n:8:MjRU/zk=";
+  tryparse "json:null";
+  tryparse "json:true";
+  tryparse "json:false";
+  tryparse "json:\"string\"";
+  tryparse "json:0";
+  tryparse "json:-1";
+  tryparse "json:2.0";
+  tryparse "json:-3.1";
+  tryparse "json:4e0";
+  tryparse "json:-5e1";
+  tryparse "json:6.2e2";
+  tryparse "json:-7.3e3";
+  tryparse "json:8e-4";
+  tryparse "json:-9e-5";
+  tryparse "json:10.4e-6";
+  tryparse "json:-11.5e-7";
+  tryparse "json:12e+8";
+  tryparse "json:-13e+9";
+  tryparse "json:14.6e+10";
+  tryparse "json:-15.7e+11";
   true

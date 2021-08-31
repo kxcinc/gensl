@@ -271,32 +271,7 @@ module Make (Lexer : Lexer) (Extensions : Extensions) = struct
           let module M = (val m : UnicodeReaderMacro) in
           ok ps (M.process (module UnicodeSourceStream))
        (* byte reader macro *)
-       | None, Some _m ->
-(*
-          let bytes_buf =
-            Sedlexing.create
-              (fun a pos n -> Array.set
-          let module BytesLexer : Lexer = struct
-            type buffer = Lexing.lexbuf
-            type location = Lexing.position
-            type nonrec pstate = buffer pstate
-            type nonrec lexresult = buffer lexresult
-
-            let loc buf =
-              (Lexing.lexeme_start_p buf, Lexing.lexeme_end_p buf)
-            let take n =
-              Lexing.
-          end in
-          let module ByteReaderMacro : SourceStream with type t = char = struct
-            type t = char
-
-            let rec take n =
-              if n <= 0 then [] else
-                match Lexer.take buf with
-          end in
-          print_endline prefix;
-*)
-          failwith "unimplemented"
+       | None, Some _m -> failwith "unimplemented"
        (* Duplicate macro *)
        | Some _, Some _ -> Duplicate_macro prefix |> fail
        (* No macro *)
@@ -509,6 +484,14 @@ module Make (Lexer : Lexer) (Extensions : Extensions) = struct
 end
 
 module Extensions : Extensions = struct
+  module Helper = struct
+    let string_of_uchar_array us : string =
+      let b = Buffer.create (Array.length us * 4) in
+      Array.iter (fun u -> Buffer.add_utf_8_uchar b u) us;
+      Buffer.contents b
+  end
+  open Helper
+
   let t : unicode_reader_macro =
     (module struct
       let advertised_prefix = "t"
@@ -528,10 +511,6 @@ module Extensions : Extensions = struct
       let advertised_prefix = "base64n"
       let process src =
         let module M = (val src : SourceStream with type t = Uchar.t) in
-        let string_of_uchar_array us : string =
-          let b = Buffer.create (Array.length us * 4) in
-          Array.iter (fun u -> Buffer.add_utf_8_uchar b u) us;
-          Buffer.contents b in
         let rec get_size acc =
           let u = Array.get (M.take 1) 0 in
           if Uchar.equal u (Uchar.of_char ':') then
@@ -549,8 +528,63 @@ module Extensions : Extensions = struct
           (`ReaderMacro ("base64n", StringMacroBody (string_of_int size ^ s)))
     end)
 
+  let json : unicode_reader_macro =
+    (module struct
+      let advertised_prefix = "json"
+      let process src =
+        let module S = (val src : SourceStream with type t = Uchar.t) in
+        let (>>=) o f = Option.bind o f in
+        let decoder = Jsonm.decoder ~encoding:`UTF_8 `Manual in
+        let repr = `ReaderMacro (advertised_prefix, StringMacroBody "") in
+        let rec lexeme () = match Jsonm.decode decoder with
+          | `Lexeme lxm -> Some lxm
+          | `End | `Error _ -> None
+          | `Await ->
+             let b =
+               (try S.take 1 with Not_found -> [||])
+               |> string_of_uchar_array |> Bytes.of_string in
+             let l = Bytes.length b in
+(*              print_endline (Bytes.to_string b); *)
+             Jsonm.Manual.src decoder b 0 l;
+             lexeme () in
+        let rec read_v = function
+          | `Null -> Some (pdatum_atom (SymbolAtom "null") repr)
+          | `Bool b -> Some (pdatum_atom (BoolAtom b) repr)
+          | `String s -> Some (pdatum_atom (StringAtom s) repr)
+          | `Float f -> Some (pdatum_atom (NumericAtom (string_of_float f, "")) repr)
+          | `As ->
+             lexeme () >>= fun lxm ->
+             read_a lxm >>= fun nodes ->
+             Some (pdatum_form nodes ListForm Infix repr)
+          | `Os ->
+             lexeme () >>= fun lxm ->
+             read_o lxm >>= fun nodes ->
+             Some (pdatum_form nodes MapForm Infix repr)
+          | _ -> None
+        and read_a = function
+          | `Ae -> Some []
+          | lxm ->
+             read_v lxm >>= fun v ->
+             lexeme () >>= fun lxm ->
+             read_a lxm >>= fun nodes ->
+             Some (PDatumNode v :: nodes)
+        and read_o = function
+          | `Oe -> Some []
+          | `Name name ->
+             lexeme () >>= fun lxm1 ->
+             read_v lxm1 >>= fun v ->
+             lexeme () >>= fun lxm2 ->
+             read_o lxm2 >>= fun nodes ->
+             Some (PKeywordNode (pdatum_atom (SymbolAtom name) repr, v) :: nodes)
+          | _ -> None in
+        let json_opt =
+          lexeme () >>= fun lxm ->
+          read_v lxm in
+        Option.get json_opt
+    end)
+
   let unicode_reader_macros = [
-    t; f; base64n;
+    t; f; base64n; json;
   ]
   let byte_reader_macros = []
 end
