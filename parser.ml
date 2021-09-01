@@ -496,23 +496,27 @@ module Extensions : Extensions = struct
     (module struct
       let advertised_prefix = "t"
       let process _ =
-        pdatum_atom (BoolAtom true) (`ReaderMacro ("t", LiteralMacroBody ""))
+        pdatum_atom
+          (BoolAtom true)
+          (`ReaderMacro (advertised_prefix, LiteralMacroBody ""))
     end)
 
   let f : unicode_reader_macro =
     (module struct
       let advertised_prefix = "f"
       let process _ =
-        pdatum_atom (BoolAtom false) (`ReaderMacro ("f", LiteralMacroBody ""))
+        pdatum_atom
+          (BoolAtom false)
+          (`ReaderMacro (advertised_prefix, LiteralMacroBody ""))
     end)
 
   let base64n : unicode_reader_macro =
     (module struct
       let advertised_prefix = "base64n"
       let process src =
-        let module M = (val src : SourceStream with type t = Uchar.t) in
+        let module S = (val src : SourceStream with type t = Uchar.t) in
         let rec get_size acc =
-          let u = Array.get (M.take 1) 0 in
+          let u = Array.get (S.take 1) 0 in
           if Uchar.equal u (Uchar.of_char ':') then
             int_of_string acc
           else if Uchar.compare (Uchar.of_char '0') u <= 0 &&
@@ -521,11 +525,11 @@ module Extensions : Extensions = struct
           else
             raise (Invalid_argument (string_of_uchar_array [|u|])) in
         let size = get_size "" in
-        let s = M.take size |> string_of_uchar_array in
+        let s = S.take size |> string_of_uchar_array in
         let bs = Base64.decode_exn s |> Bytes.of_string in
         pdatum_atom
           (BytesAtom bs)
-          (`ReaderMacro ("base64n", StringMacroBody (string_of_int size ^ s)))
+          (`ReaderMacro (advertised_prefix, StringMacroBody (string_of_int size ^ s)))
     end)
 
   let json : unicode_reader_macro =
@@ -544,7 +548,6 @@ module Extensions : Extensions = struct
                (try S.take 1 with Not_found -> [||])
                |> string_of_uchar_array |> Bytes.of_string in
              let l = Bytes.length b in
-(*              print_endline (Bytes.to_string b); *)
              Jsonm.Manual.src decoder b 0 l;
              lexeme () in
         let rec read_v = function
@@ -583,8 +586,46 @@ module Extensions : Extensions = struct
         Option.get json_opt
     end)
 
+  let csv : unicode_reader_macro =
+    (module struct
+      let advertised_prefix = "csv"
+      let process src =
+        let module S = (val src : SourceStream with type t = Uchar.t) in
+        let take_while p =
+          let rec loop acc =
+            if p acc then acc
+            else loop (acc ^ (string_of_uchar_array (S.take 1))) in
+          loop "" in
+        let end_mark =
+          take_while
+            (fun src ->
+               if String.length src < 1 then false
+               else Str.last_chars src 1 = "\n")
+          |> (fun src -> "\n" ^ String.sub src 0 (String.length src - 1)) in
+        let end_mark_len = String.length end_mark in
+        let csv_body_str =
+          take_while
+            (fun src ->
+               if String.length src < end_mark_len then false
+               else Str.last_chars src end_mark_len = end_mark)
+          |> (fun src -> String.sub src 0 (String.length src - end_mark_len)) in
+        let repr = `ReaderMacro (advertised_prefix, StringMacroBody csv_body_str) in
+        let csv_body = Csv.of_string csv_body_str in
+        let rec loop acc =
+          let row_opt = try Some (Csv.next csv_body) with End_of_file -> None in
+          match row_opt with
+          | None -> pdatum_form acc ListForm Infix repr
+          | Some row ->
+             let nodes =
+               List.map (fun s -> PDatumNode (pdatum_atom (StringAtom s) repr)) row in
+             let datum = (pdatum_form nodes ListForm Infix repr) in
+             let node = PDatumNode datum in
+             loop (node :: acc) in
+        loop []
+    end)
+
   let unicode_reader_macros = [
-    t; f; base64n; json;
+    t; f; base64n; json; csv;
   ]
   let byte_reader_macros = []
 end

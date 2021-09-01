@@ -235,4 +235,7 @@ let%test "simple examples parses" =
   tryparse "json:-13e+9";
   tryparse "json:14.6e+10";
   tryparse "json:-15.7e+11";
+  tryparse "csv:<<END_LINE\na,b,c\n0,1,2\n3,4,5\n<<END_LINE";
+  tryparse "csv:<<end\na,b,c\n0,1,2\n3,4,5\n<<end";
+  tryparse "csv:~~~\na,b,c\n0,1,2\n3,4,5\n~~~";
   true
