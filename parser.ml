@@ -614,13 +614,25 @@ module Extensions : Extensions = struct
         let rec loop acc =
           let row_opt = try Some (Csv.next csv_body) with End_of_file -> None in
           match row_opt with
-          | None -> pdatum_form acc ListForm Infix repr
+          | None -> begin match acc with
+              | [] ->
+                 pdatum_form [] ListForm Infix repr
+              | header :: body ->
+                 pdatum_form
+                   [PKeywordNode
+                      (pdatum_atom (SymbolAtom "header") repr, header);
+                    PKeywordNode
+                      (pdatum_atom (SymbolAtom "body") repr,
+                       pdatum_form
+                         (List.map (fun datum -> (PDatumNode datum)) body)
+                         ListForm Infix repr)]
+                   ListForm Infix repr
+            end
           | Some row ->
              let nodes =
                List.map (fun s -> PDatumNode (pdatum_atom (StringAtom s) repr)) row in
              let datum = (pdatum_form nodes ListForm Infix repr) in
-             let node = PDatumNode datum in
-             loop (node :: acc) in
+             loop (datum :: acc) in
         loop []
     end)
 
