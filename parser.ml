@@ -498,7 +498,7 @@ module Extensions : Extensions = struct
       let process _ =
         pdatum_atom
           (BoolAtom true)
-          (`ReaderMacro (advertised_prefix, LiteralMacroBody ""))
+          (`ReaderMacro (advertised_prefix, LiteralMacroBody "true"))
     end)
 
   let f : unicode_reader_macro =
@@ -507,7 +507,7 @@ module Extensions : Extensions = struct
       let process _ =
         pdatum_atom
           (BoolAtom false)
-          (`ReaderMacro (advertised_prefix, LiteralMacroBody ""))
+          (`ReaderMacro (advertised_prefix, LiteralMacroBody "false"))
     end)
 
   let base64n : unicode_reader_macro =
@@ -538,8 +538,13 @@ module Extensions : Extensions = struct
       let process src =
         let module S = (val src : SourceStream with type t = Uchar.t) in
         let (>>=) o f = Option.bind o f in
+        let pdatum_atom_macro atom body =
+          pdatum_atom atom (`ReaderMacro (advertised_prefix, body)) in
+        let pdatum_form_macro nodes fstyle fix =
+          let form = {elem = (nodes, fstyle, fix); repr = `Direct} in
+          let repr = `ReaderMacro (advertised_prefix, FormMacroBody form) in
+          pdatum_form nodes fstyle fix repr in
         let decoder = Jsonm.decoder ~encoding:`UTF_8 `Manual in
-        let repr = `ReaderMacro (advertised_prefix, StringMacroBody "") in
         let rec lexeme () = match Jsonm.decode decoder with
           | `Lexeme lxm -> Some lxm
           | `End | `Error _ -> None
@@ -551,18 +556,30 @@ module Extensions : Extensions = struct
              Jsonm.Manual.src decoder b 0 l;
              lexeme () in
         let rec read_v = function
-          | `Null -> Some (pdatum_atom (SymbolAtom "null") repr)
-          | `Bool b -> Some (pdatum_atom (BoolAtom b) repr)
-          | `String s -> Some (pdatum_atom (StringAtom s) repr)
-          | `Float f -> Some (pdatum_atom (NumericAtom (string_of_float f, "")) repr)
+          | `Null ->
+             Some (pdatum_atom_macro
+                     (SymbolAtom "null")
+                     (LiteralMacroBody "null"))
+          | `Bool b ->
+             Some (pdatum_atom_macro
+                     (BoolAtom b)
+                     (LiteralMacroBody (string_of_bool b)))
+          | `String s ->
+             Some (pdatum_atom_macro
+                     (StringAtom s)
+                     (StringMacroBody s))
+          | `Float f ->
+             Some (pdatum_atom_macro
+                     (NumericAtom (string_of_float f, ""))
+                     (LiteralMacroBody (string_of_float f)))
           | `As ->
              lexeme () >>= fun lxm ->
              read_a lxm >>= fun nodes ->
-             Some (pdatum_form nodes ListForm Infix repr)
+             Some (pdatum_form_macro nodes ListForm Infix)
           | `Os ->
              lexeme () >>= fun lxm ->
              read_o lxm >>= fun nodes ->
-             Some (pdatum_form nodes MapForm Infix repr)
+             Some (pdatum_form_macro nodes MapForm Infix)
           | _ -> None
         and read_a = function
           | `Ae -> Some []
@@ -578,7 +595,9 @@ module Extensions : Extensions = struct
              read_v lxm1 >>= fun v ->
              lexeme () >>= fun lxm2 ->
              read_o lxm2 >>= fun nodes ->
-             Some (PKeywordNode (pdatum_atom (SymbolAtom name) repr, v) :: nodes)
+             Some (PKeywordNode
+                     (pdatum_atom_macro (SymbolAtom name) (LiteralMacroBody name), v)
+                   :: nodes)
           | _ -> None in
         let json_opt =
           lexeme () >>= fun lxm ->
@@ -591,6 +610,12 @@ module Extensions : Extensions = struct
       let advertised_prefix = "csv"
       let process src =
         let module S = (val src : SourceStream with type t = Uchar.t) in
+        let pdatum_atom_macro atom body =
+          pdatum_atom atom (`ReaderMacro (advertised_prefix, body)) in
+        let pdatum_form_macro nodes fstyle fix =
+          let form = {elem = (nodes, fstyle, fix); repr = `Direct} in
+          let repr = `ReaderMacro (advertised_prefix, FormMacroBody form) in
+          pdatum_form nodes fstyle fix repr in
         let take_while p =
           let rec loop acc =
             if p acc then acc
@@ -609,26 +634,39 @@ module Extensions : Extensions = struct
                if String.length src < end_mark_len then false
                else Str.last_chars src end_mark_len = end_mark)
           |> (fun src -> String.sub src 0 (String.length src - end_mark_len)) in
-        let repr = `ReaderMacro (advertised_prefix, StringMacroBody csv_body_str) in
         let csv_body = Csv.of_string csv_body_str in
         let rec loop acc =
           let row_opt = try Some (Csv.next csv_body) with End_of_file -> None in
           match row_opt, acc with
-          | None, [] -> pdatum_form [] ListForm Infix repr
+          | None, [] ->
+             pdatum_form_macro
+               [PKeywordNode (pdatum_atom_macro
+                                (SymbolAtom "header")
+                                (LiteralMacroBody "header"),
+                              pdatum_form_macro [] ListForm Infix);
+                PKeywordNode (pdatum_atom_macro
+                                (SymbolAtom "body")
+                                (LiteralMacroBody "body"),
+                              pdatum_form_macro [] ListForm Infix)]
+               MapForm Infix
           | None, header :: body ->
-             pdatum_form
+             pdatum_form_macro
                [PKeywordNode
-                  (pdatum_atom (SymbolAtom "header") repr, header);
+                  (pdatum_atom_macro (SymbolAtom "header") (LiteralMacroBody "header"),
+                   header);
                 PKeywordNode
-                  (pdatum_atom (SymbolAtom "body") repr,
-                   pdatum_form
+                  (pdatum_atom_macro (SymbolAtom "body") (LiteralMacroBody "body"),
+                   pdatum_form_macro
                      (List.map (fun datum -> (PDatumNode datum)) body)
-                     ListForm Infix repr)]
-               ListForm Infix repr
+                     ListForm Infix)]
+               MapForm Infix
           | Some row, _ ->
              let nodes =
-               List.map (fun s -> PDatumNode (pdatum_atom (StringAtom s) repr)) row in
-             let datum = (pdatum_form nodes ListForm Infix repr) in
+               List.map
+                 (fun s ->
+                    PDatumNode (pdatum_atom_macro (StringAtom s) (StringMacroBody s)))
+                 row in
+             let datum = (pdatum_form_macro nodes ListForm Infix) in
              loop (datum :: acc) in
         loop []
     end)
