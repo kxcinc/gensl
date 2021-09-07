@@ -1,10 +1,11 @@
 open Genslib
 open Gensl
+open Readermacro
 
 let parse_et_print ?fxnconv use_unparse str =
   let open Sedlexing in
   let open Format in
-  let module P = Parser.Default in
+  let module P = Parser.Default (Extensions) in
   let lexbuf = Utf8.from_string str in
   P.read_top (Parsing.ParserTypes.pstate lexbuf) |> function
   | Ok (datum,_) when use_unparse ->

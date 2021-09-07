@@ -9,6 +9,8 @@ open Parsetree
 
 open ParserTypes
 
+open Readermacro
+
 let trylex str =
   let open Sedlexing in
   let open Format in
@@ -23,7 +25,7 @@ let trylex str =
 let tryparse str =
   let open Sedlexing in
   let open Format in
-  let module P = Parser.Default in
+  let module P = Parser.Default (Extensions) in
   let lexbuf = Utf8.from_string str in
   P.read_datum (pstate lexbuf) |> function
   | Ok (datum,_) ->

@@ -8,6 +8,8 @@ open Parsetree
 
 open ParserTypes
 
+open Readermacro
+
 let pp_pdatum = ParsetreePrinter.pp_pdatum
 
 let output_debug = ref false
@@ -29,7 +31,7 @@ let debug ?str datum =
 
 let parse str =
   let open Sedlexing in
-  let module P = Parser.Default in
+  let module P = Parser.Default (Extensions) in
   let lexbuf = Utf8.from_string str in
   P.read_datum (pstate lexbuf)
 

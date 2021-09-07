@@ -11,6 +11,8 @@ open Parsetree
 
 open ParserTypes
 
+open Readermacro
+
 (* roadmap to MVP
  - [ ] make index.html accessible from the Internet via GitHub Pages
 
@@ -40,7 +42,7 @@ let trylex str =
 let tryparse str =
   let open Sedlexing in
   let open Format in
-  let module P = Parser.Default in
+  let module P = Parser.Default (Extensions) in
   let lexbuf = Utf8.from_string str in
   P.read_top (pstate lexbuf) |> function
   | Ok (toplevel, _)->  Ok (unparse_for_repl toplevel)
