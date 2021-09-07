@@ -77,62 +77,70 @@ let () =
   then tryparse Sys.argv.(1) |> debug
   else ()
 
-let add_paragraph ?(color="black") paragraph =
-  let repl_history = Dom_html.getElementById "repl-history" in
-  (if color = "" then ()
-   else Js.Unsafe.set paragraph "style" ("color:" ^ color));
-  Dom.appendChild repl_history paragraph
+let createPrompt doc =
+  let textnode = doc##createTextNode (Js.string "gensl> ") in
+  let span = Dom_html.createSpan doc in
+  span##.style##.color := Js.string "blue";
+  span##.style##.verticalAlign := Js.string "top";
+  Dom.appendChild span textnode;
+  span
 
-let add_input text =
-  let p = Dom_html.createP Dom_html.document in
-  let span = Dom_html.createSpan Dom_html.document in
-  let prompt = Dom_html.document##createTextNode (Js.string "gensl> ") in
-  let textnode = Dom_html.document##createTextNode text in
-  Js.Unsafe.set span "style" "color:blue";
-  Dom.appendChild span prompt;
-  Dom.appendChild p span;
+let add_input doc text history =
+  let p = Dom_html.createP doc in
+  let prompt = createPrompt doc in
+  let textnode = doc##createTextNode text in
+  Dom.appendChild p prompt;
   Dom.appendChild p textnode;
-  add_paragraph p
+  Dom.appendChild history p
 
-let add_output text =
-  let p = Dom_html.createP Dom_html.document in
-  let textnode = Dom_html.document##createTextNode text in
+let add_output doc text history =
+  let p = Dom_html.createP doc in
+  let textnode = doc##createTextNode text in
   Dom.appendChild p textnode;
-  add_paragraph p
+  Dom.appendChild history p
 
-let add_error text =
-  let p = Dom_html.createP Dom_html.document in
-  let textnode = Dom_html.document##createTextNode text in
+let add_error doc text history =
+  let p = Dom_html.createP doc in
+  let textnode = doc##createTextNode text in
+  p##.style##.color := Js.string "red";
   Dom.appendChild p textnode;
-  add_paragraph ~color:"red" p
-
-let clear_input () =
-  let input_field = Dom_html.getElementById "input-field" in
-  Js.Unsafe.set input_field "value" ""
+  Dom.appendChild history p
 
 let () =
-  let open Sedlexing in
-  let open Format in
-  let module P = Parser.Default in
-  let input_field = Dom_html.getElementById "input-field" in
+  let app_main = Dom_html.getElementById "app-main" in
+
+  let repl_history = Dom_html.createDiv Dom_html.document in
+  repl_history##.id := Js.string "repl-history";
+  Dom.appendChild app_main repl_history;
+
+  let repl_input = Dom_html.createP Dom_html.document in
+  repl_input##.id := Js.string "repl-input";
+  Dom.appendChild app_main repl_input;
+
   let keypress = Dom.Event.make "keypress" in
+
+  let prompt = createPrompt Dom_html.document in
+  Dom.appendChild repl_input prompt;
+
+  let textarea = Dom_html.createTextarea Dom_html.document in
+  textarea##.cols := 40;
+  textarea##.rows := 1;
+  Dom.appendChild repl_input textarea;
+
   let _ =
     Dom.addEventListener
-      input_field
-      keypress
+      textarea keypress
       (Dom.handler (fun e ->
-           if e##.key == Js.string "Enter" then
-             begin
-               let input_value = Js.Unsafe.get input_field "value" in
-               let parsed_value = tryparse (Js.to_string input_value) in
-               add_input input_value;
-               (match parsed_value with
-                | Ok output -> add_output (Js.string output)
-                | Error error -> add_error (Js.string error));
-               clear_input ();
-               Js._false
-             end
-           else
+           if e##.key == Js.string "Enter" && e##.ctrlKey then begin
+             let text = textarea##.value in
+             textarea##.value := Js.string "";
+             add_input Dom_html.document text repl_history;
+             (match tryparse (Js.to_string text) with
+              | Ok output -> add_output Dom_html.document (Js.string output) repl_history
+              | Error error -> add_error Dom_html.document (Js.string error) repl_history);
+             Js._false
+           end else
              Js._true))
       Js._true in
+
   ()
