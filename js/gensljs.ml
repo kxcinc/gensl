@@ -39,24 +39,25 @@ let trylex str =
    | _ -> printf "idk\n");
   print_flush()
 
-let tryparse str =
+let tryparse use_unparse str =
   let open Sedlexing in
   let open Format in
   let module P = Parser.Default (Extensions) in
   let lexbuf = Utf8.from_string str in
-  P.read_top (pstate lexbuf) |> function
-  | Ok (toplevel, _)->  Ok (unparse_for_repl toplevel)
-  | Error errors -> Error (asprintf "%a" ParseError.pp (Parse_errors errors))
+  (P.read_top (pstate lexbuf), use_unparse) |> function
+  | Ok (toplevel, _), true ->  Ok (unparse_for_repl toplevel)
+  | Ok (toplevel, _), false ->  Ok (asprintf "%a" ParsetreePrinter.pp_toplevel toplevel)
+  | Error errors, _ -> Error (asprintf "%a" ParseError.pp (Parse_errors errors))
 
 let tryparse_console str =
-  match tryparse str with
+  match tryparse true str with
   | Ok s -> s
   | Error s -> s
 
 let () =
   let api = (object%js
                method trylex str = str |> Js.to_string |> trylex
-               method tryparse str = str |> Js.to_string |> tryparse
+               method tryparse b str = str |> Js.to_string |> tryparse b
                method lex str =
                  let str = str |> Js.to_string in
                  let open Sedlexing in
@@ -74,7 +75,7 @@ let debug_string msg =
 
 let () =
   if Array.length Sys.argv > 1
-  then tryparse Sys.argv.(1) |> debug
+  then tryparse true Sys.argv.(1) |> debug
   else ()
 
 let createPrompt doc =
@@ -108,6 +109,7 @@ let add_error doc text history =
 
 let () =
   let app_main = Dom_html.getElementById "app-main" in
+  let unparse_mode = ref true in
 
   let repl_history = Dom_html.createDiv Dom_html.document in
   repl_history##.id := Js.string "repl-history";
@@ -135,9 +137,15 @@ let () =
              let text = textarea##.value in
              textarea##.value := Js.string "";
              add_input Dom_html.document text repl_history;
-             (match tryparse (Js.to_string text) with
-              | Ok output -> add_output Dom_html.document (Js.string output) repl_history
-              | Error error -> add_error Dom_html.document (Js.string error) repl_history);
+             (match Js.to_string text with
+              | "#unparse on" -> unparse_mode := true
+              | "#unparse off" -> unparse_mode := false
+              | text ->
+                 (match tryparse !unparse_mode text with
+                   | Ok output ->
+                      add_output Dom_html.document (Js.string output) repl_history
+                   | Error error ->
+                      add_error Dom_html.document (Js.string error) repl_history));
              Js._false
            end else
              Js._true))
