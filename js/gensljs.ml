@@ -87,12 +87,12 @@ let createPrompt doc =
   span
 
 let add_input doc text history =
-  let p = Dom_html.createP doc in
+  let pre = Dom_html.createPre doc in
   let prompt = createPrompt doc in
   let textnode = doc##createTextNode text in
-  Dom.appendChild p prompt;
-  Dom.appendChild p textnode;
-  Dom.appendChild history p
+  Dom.appendChild pre prompt;
+  Dom.appendChild pre textnode;
+  Dom.appendChild history pre
 
 let add_output doc text history =
   let p = Dom_html.createP doc in
